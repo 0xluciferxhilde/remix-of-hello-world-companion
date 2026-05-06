@@ -501,7 +501,7 @@ function TokenSelector({
               )}
               {filtered.map((c, idx) => {
                 const active = idx === activeIndex
-                const isLD = c.symbol === "zkLTC" || c.symbol === "LDEX"
+                const isLD = c.symbol === "LDEX"
 
                 return (
                   <button
