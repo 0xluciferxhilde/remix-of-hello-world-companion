@@ -264,32 +264,32 @@ export const POPULAR_TOKENS: Token[] = [
   { 
     address: "0xFC43ABE529CDC61B7F0aa2e677451AFd83d2B304", 
     symbol: "USDC", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/USDC.png" 
+    image: "/logos/usdc.jpg" 
   },
   { 
     address: "0x6858790e164a8761a711BAD1178220C5AebcF7eC", 
     symbol: "PEPE", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/PEPE.png" 
+    image: "/logos/pepe.jpg" 
   },
   { 
     address: "0xa38c318a0B755154b25f28cAD7b2312747B073C6", 
     symbol: "USDT", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/USDT.png" 
+    image: "/logos/usdt.jpg" 
   },
   { 
     address: "0xFC73cdB75F37B0da829c4e54511f410D525B76b2", 
     symbol: "Lester", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/Lester.png" 
+    image: "/logos/lester.jpg" 
   },
   { 
     address: "0x68Bf11e64cfD939fE1761012862FBFE47048118e", 
     symbol: "WETH", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/WETH.png" 
+    image: "/logos/weth.jpg" 
   },
   { 
     address: "0xcFe6BE457D366329CCdeE7fBC48aBf1d6FFeB9C0", 
     symbol: "WBTC", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/WBTC.png" 
+    image: "/logos/wbtc.jpg" 
   },
   { 
     address: "0xBAaba603e6298fbb76325a6B0d47Cd57154ca641", 
@@ -299,37 +299,37 @@ export const POPULAR_TOKENS: Token[] = [
   { 
     address: "0x314522DD1B3f74Dd1DdE03E5B5a628C28134b25d", 
     symbol: "zkPEPE", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/zkPEPE.png" 
+    image: "/logos/zkpepe.jpg" 
   },
   { 
     address: "0xaf9F497007342Dd025Ff696964A736Ec9584c3dd", 
     symbol: "zkETH", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/zkETH.png" 
+    image: "/logos/zketh.jpg" 
   },
   { 
     address: "0xF425553A84e579BE353a6180F7d53d8101bfb3E4", 
     symbol: "LDTOAD", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/LDTOAD.png" 
+    image: "/logos/litoad.jpg" 
   },
   { 
     address: "0x60DD65bAd8a73Dfd8DF029C4e3b372d575B03BC2", 
     symbol: "USDC.t", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/USDC.png" 
+    image: "/logos/usdc.jpg" 
   },
   { 
     address: "0xd8C4e6dBe48472d6C563eB1cc330207d020D4c8f", 
     symbol: "YURI", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/YURI.png" 
+    image: "/logos/yuri.jpg" 
   },
   { 
     address: "0x05149f41AFE7ca712D6A42390e8047E0f2887284", 
     symbol: "CHAWLEE", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/CHAWLEE.png" 
+    image: "/logos/chawlee.jpg" 
   },
 ];
 
 export const SWAP_TOKENS: Token[] = [
-  { address: NATIVE_SENTINEL, symbol: "zkLTC" },
+  { address: NATIVE_SENTINEL, symbol: "zkLTC", image: "/logos/zkltc.jpg" },
   ...POPULAR_TOKENS,
 ];
 
