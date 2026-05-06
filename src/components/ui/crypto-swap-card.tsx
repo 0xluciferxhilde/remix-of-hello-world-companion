@@ -333,6 +333,13 @@ export default function SwapCard({
   )
 }
 
+const LogoLD = ({ className = "", size = 16 }: { className?: string; size?: number }) => (
+  <div className={cn("relative flex items-center justify-center font-black italic tracking-tighter cursor-default filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]", className)}>
+    <span style={{ fontSize: size }} className="text-black leading-none select-none">L</span>
+    <span style={{ fontSize: size }} className="text-black leading-none -ml-[0.1em] select-none">D</span>
+  </div>
+);
+
 function TokenSelector({
   coins,
   selectedId,
@@ -400,10 +407,7 @@ function TokenSelector({
     if (!list) return
     const el = list.querySelector<HTMLButtonElement>('[data-active="true"]')
     if (el) {
-      const box = el.getBoundingClientRect()
-      const parent = list.getBoundingClientRect()
-      if (box.top < parent.top) el.scrollIntoView({ block: "nearest" })
-      else if (box.bottom > parent.bottom) el.scrollIntoView({ block: "nearest" })
+      el.scrollIntoView({ block: "nearest" })
     }
   }
 
@@ -424,15 +428,21 @@ function TokenSelector({
         ].join(" ")}
         title="Choose token"
       >
-        <img
-          src={selected?.image || "/placeholder.svg"}
-          alt={`${selected?.symbol} logo`}
-          width={20}
-          height={20}
-          className="size-5 rounded-full border border-brand-border object-cover"
-          crossOrigin="anonymous"
-          referrerPolicy="no-referrer"
-        />
+        {selected?.symbol === "zkLTC" || selected?.symbol === "LDEX" ? (
+          <div className="size-5 rounded-full bg-white flex items-center justify-center">
+             <LogoLD size={14} />
+          </div>
+        ) : (
+          <img
+            src={selected?.image || "/placeholder.svg"}
+            alt={`${selected?.symbol} logo`}
+            width={20}
+            height={20}
+            className="size-5 rounded-full border border-brand-border object-cover"
+            crossOrigin="anonymous"
+            referrerPolicy="no-referrer"
+          />
+        )}
         <span className="font-bold">{selected?.symbol?.toUpperCase()}</span>
         <span aria-hidden="true" className="ml-1 text-[8px]">▼</span>
       </button>
@@ -481,65 +491,52 @@ function TokenSelector({
               )}
               {filtered.map((c, idx) => {
                 const active = idx === activeIndex
-                const change = c.price_change_percentage_24h ?? 0
-                const changeClass =
-                  change > 0 ? "text-emerald-500" : change < 0 ? "text-red-500" : "text-brand-text-muted"
+                const isLD = c.symbol === "zkLTC" || c.symbol === "LDEX"
 
                 return (
                   <button
-                    key={c.id}
+                    key={c.address}
                     role="option"
-                    aria-selected={c.id === selectedId}
+                    aria-selected={c.address === selectedId}
                     data-active={active ? "true" : undefined}
                     onMouseEnter={() => setActiveIndex(idx)}
                     onClick={() => {
-                      onSelect(c.id)
+                      onSelect(c.address)
                       setOpen(false)
                       setQuery("")
                       buttonRef.current?.focus()
                     }}
                     className={[
                       "w-full flex items-center gap-3 rounded-lg px-2.5 py-3 text-left transition-all",
-                      c.id === selectedId
+                      c.address === selectedId
                         ? "bg-white/10"
                         : active
                         ? "bg-white/5"
                         : "hover:bg-white/5",
                     ].join(" ")}
                   >
-                    <img
-                      src={c.image || "/placeholder.svg"}
-                      alt=""
-                      width={22}
-                      height={22}
-                      className="size-6 rounded-full border border-brand-border object-cover"
-                      crossOrigin="anonymous"
-                      referrerPolicy="no-referrer"
-                    />
+                    {isLD ? (
+                      <div className="size-6 rounded-full bg-white flex items-center justify-center shrink-0">
+                         <LogoLD size={16} />
+                      </div>
+                    ) : (
+                      <img
+                        src={c.image || "/placeholder.svg"}
+                        alt=""
+                        width={22}
+                        height={22}
+                        className="size-6 rounded-full border border-brand-border object-cover shrink-0"
+                        crossOrigin="anonymous"
+                        referrerPolicy="no-referrer"
+                      />
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold truncate">
                           {c.symbol.toUpperCase()}
                         </span>
-                        <span className="text-[10px] text-brand-text-muted truncate uppercase font-bold tracking-tight">
-                          {c.name}
-                        </span>
-                        {c.market_cap_rank != null && (
-                          <span className="ml-auto text-[10px] text-brand-text-muted font-mono font-bold">
-                            #{c.market_cap_rank}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-[10px] font-bold">
-                        <span className="text-brand-text-muted uppercase">
-                          {new Intl.NumberFormat(undefined, {
-                            style: "currency",
-                            currency: "USD",
-                          }).format(c.current_price)}
-                        </span>
-                        <span className={changeClass}>
-                          {change > 0 ? "+" : ""}
-                          {change.toFixed(2)}%
+                        <span className="text-[10px] text-brand-text-muted truncate font-mono opacity-50">
+                          {c.address.slice(0, 6)}...{c.address.slice(-4)}
                         </span>
                       </div>
                     </div>

@@ -261,17 +261,45 @@ export const ROUTERS: Record<RouterKey, { address: string; label: string; factor
 };
 
 export const POPULAR_TOKENS: Token[] = [
-  { address: "0xFC43ABE529CDC61B7F0aa2e677451AFd83d2B304", symbol: "USDC" },
+  { 
+    address: "0xFC43ABE529CDC61B7F0aa2e677451AFd83d2B304", 
+    symbol: "USDC", 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/usdc.png" 
+  },
+  { 
+    address: "0x6858790e164a8761a711BAD1178220C5AebcF7eC", 
+    symbol: "PEPE", 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/pepe.png" 
+  },
+  { 
+    address: "0xa38c318a0B755154b25f28cAD7b2312747B073C6", 
+    symbol: "USDT", 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/usdt.png" 
+  },
+  { 
+    address: "0xFC73cdB75F37B0da829c4e54511f410D525B76b2", 
+    symbol: "Lester", 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/lester.png" 
+  },
+  { 
+    address: "0x68Bf11e64cfD939fE1761012862FBFE47048118e", 
+    symbol: "WETH", 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/weth.png" 
+  },
+  { 
+    address: "0xcFe6BE457D366329CCdeE7fBC48aBf1d6FFeB9C0", 
+    symbol: "WBTC", 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/wbtc.png" 
+  },
+  { 
+    address: "0xBAaba603e6298fbb76325a6B0d47Cd57154ca641", 
+    symbol: "LDEX", 
+    image: "" // Handled specially
+  },
   { address: "0x314522DD1B3f74Dd1DdE03E5B5a628C28134b25d", symbol: "zkPEPE" },
   { address: "0xaf9F497007342Dd025Ff696964A736Ec9584c3dd", symbol: "zkETH" },
-  { address: "0xFC73cdB75F37B0da829c4e54511f410D525B76b2", symbol: "Lester" },
-  { address: "0x6858790e164a8761a711BAD1178220C5AebcF7eC", symbol: "PEPE" },
-  { address: "0xBAaba603e6298fbb76325a6B0d47Cd57154ca641", symbol: "LDEX" },
   { address: "0xF425553A84e579BE353a6180F7d53d8101bfb3E4", symbol: "LDTOAD" },
   { address: "0x60DD65bAd8a73Dfd8DF029C4e3b372d575B03BC2", symbol: "USDC.t" },
-  { address: "0xa38c318a0B755154b25f28cAD7b2312747B073C6", symbol: "USDT" },
-  { address: "0x68Bf11e64cfD939fE1761012862FBFE47048118e", symbol: "WETH" },
-  { address: "0xcFe6BE457D366329CCdeE7fBC48aBf1d6FFeB9C0", symbol: "WBTC" },
   { address: "0xd8C4e6dBe48472d6C563eB1cc330207d020D4c8f", symbol: "YURI" },
   { address: "0x05149f41AFE7ca712D6A42390e8047E0f2887284", symbol: "CHAWLEE" },
 ];
