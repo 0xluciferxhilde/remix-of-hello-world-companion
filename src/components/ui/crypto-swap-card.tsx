@@ -1,73 +1,34 @@
 import * as React from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { useAccount, useBalance } from "wagmi"
+import { parseEther, formatEther, Contract } from "ethers"
+import { 
+  SWAP_TOKENS, 
+  NATIVE_SENTINEL, 
+  quoteSwap, 
+  swap, 
+  pickRouter, 
+  ROUTERS, 
+  resolveWrappedNative, 
+  buildSwapPath, 
+  approveToken,
+  ERC20_ABI,
+  isNativeAddr,
+  errMsg,
+  loadPair,
+  addLiquidity,
+  removeLiquidity,
+  DEFAULT_ROUTER
+} from "@/lib/litdex-core-logic"
 
 type Coin = {
-  id: string
+  address: string
   symbol: string
-  name: string
-  image: string
-  current_price: number
-  price_change_percentage_24h: number | null
-  market_cap_rank: number | null
+  image?: string
 }
 
-const LOCAL_COINS: Coin[] = [
-  {
-    id: "zkltc",
-    symbol: "zkLTC",
-    name: "Native LiteForge",
-    image: "https://cryptologos.cc/logos/litecoin-ltc-logo.png?v=040",
-    current_price: 85.42,
-    price_change_percentage_24h: 2.45,
-    market_cap_rank: 1,
-  },
-  {
-    id: "pepe",
-    symbol: "PEPE",
-    name: "Pepe",
-    image: "https://cryptologos.cc/logos/pepe-pepe-logo.png?v=040",
-    current_price: 0.00001245,
-    price_change_percentage_24h: 12.50,
-    market_cap_rank: 2,
-  },
-  {
-    id: "zkpepe",
-    symbol: "zkPEPE",
-    name: "zkPepe",
-    image: "https://cryptologos.cc/logos/pepe-pepe-logo.png?v=040",
-    current_price: 0.00000812,
-    price_change_percentage_24h: -1.20,
-    market_cap_rank: 3,
-  },
-  {
-    id: "lester",
-    symbol: "LESTER",
-    name: "Lester",
-    image: "https://raw.githubusercontent.com/lucide-react/lucide/main/icons/dog.svg",
-    current_price: 0.154,
-    price_change_percentage_24h: 5.67,
-    market_cap_rank: 4,
-  },
-  {
-    id: "usdc",
-    symbol: "USDC",
-    name: "USD Coin",
-    image: "https://cryptologos.cc/logos/usd-coin-usdc-logo.png?v=040",
-    current_price: 1.00,
-    price_change_percentage_24h: 0.01,
-    market_cap_rank: 5,
-  },
-  {
-    id: "usdt",
-    symbol: "USDT",
-    name: "Tether",
-    image: "https://cryptologos.cc/logos/tether-usdt-logo.png?v=040",
-    current_price: 1.00,
-    price_change_percentage_24h: -0.02,
-    market_cap_rank: 6,
-  },
-]
+const LOCAL_COINS = SWAP_TOKENS;
 
 export type SwapCardProps = {
   defaultFromId?: string
@@ -77,91 +38,120 @@ export type SwapCardProps = {
 }
 
 export default function SwapCard({
-  defaultFromId = "zkltc",
-  defaultToId = "usdc",
+  defaultFromId = NATIVE_SENTINEL,
+  defaultToId = "0xFC43ABE529CDC61B7F0aa2e677451AFd83d2B304",
   className = "",
   mode = "swap",
 }: SwapCardProps) {
-  // Use local data instead of fetching
+  const { address: walletAddress, isConnected } = useAccount();
   const data = LOCAL_COINS;
-  const isLoading = false;
-  const error = null;
-  const mutate = () => {}; 
+
+  const [fromAddr, setFromAddr] = React.useState<string>(defaultFromId)
+  const [toAddr, setToAddr] = React.useState<string>(defaultToId)
+  const [fromAmount, setFromAmount] = React.useState<string>("1")
+  const [toAmount, setToAmount] = React.useState<string>("0")
+  const [isLoadingQuote, setIsLoadingQuote] = React.useState(false)
+  const [isSwapping, setIsSwapping] = React.useState(false)
+  const [subMode, setSubMode] = React.useState<"add" | "remove">("add")
 
   const coinMap = React.useMemo(() => {
     const map = new Map<string, Coin>()
-    data?.forEach((c) => map.set(c.id, c))
+    data.forEach((c) => map.set(c.address, c))
     return map
   }, [data])
 
-  const initialFrom = coinMap.get(defaultFromId)?.id || (data?.[0]?.id ?? "")
-  const initialTo =
-    coinMap.get(defaultToId)?.id || (data?.find((c) => c.id !== initialFrom)?.id ?? "")
+  const fromCoin = fromAddr ? coinMap.get(fromAddr) : undefined
+  const toCoin = toAddr ? coinMap.get(toAddr) : undefined
 
-  const [fromId, setFromId] = React.useState<string>(initialFrom)
-  const [toId, setToId] = React.useState<string>(initialTo)
-  const [fromAmount, setFromAmount] = React.useState<string>("1")
-  const [subMode, setSubMode] = React.useState<"add" | "remove">("add")
-
+  // Quote logic
   React.useEffect(() => {
-    if (!data?.length) return
-    if (!coinMap.has(fromId)) setFromId(initialFrom)
-    if (!coinMap.has(toId) || initialFrom === initialTo) setToId(initialTo)
-  }, [data])
+    const fetchQuote = async () => {
+      if (!fromAmount || isNaN(Number(fromAmount)) || Number(fromAmount) <= 0 || !fromAddr || !toAddr || fromAddr === toAddr) {
+        setToAmount("0");
+        return;
+      }
+      if (mode === "pool") return; 
 
-  const fromCoin = fromId ? coinMap.get(fromId) : undefined
-  const toCoin = toId ? coinMap.get(toId) : undefined
+      setIsLoadingQuote(true);
+      try {
+        const rKey = pickRouter(fromAddr, toAddr);
+        const rAddr = ROUTERS[rKey].address;
+        const wrapped = await resolveWrappedNative(rAddr);
+        const path = buildSwapPath(fromAddr, toAddr, wrapped);
+        const amountInWei = parseEther(fromAmount);
+        const outWei = await quoteSwap(rAddr, amountInWei, path);
+        setToAmount(formatEther(outWei));
+      } catch (err) {
+        console.error("Quote error:", err);
+        setToAmount("0");
+      } finally {
+        setIsLoadingQuote(false);
+      }
+    };
 
-  const parsedAmount = React.useMemo(() => {
-    const n = Number(fromAmount)
-    return Number.isFinite(n) && n >= 0 ? n : 0
-  }, [fromAmount])
-
-  const toAmount = React.useMemo(() => {
-    if (!fromCoin || !toCoin) return 0
-    if (toCoin.current_price <= 0) return 0
-    return parsedAmount * (fromCoin.current_price / toCoin.current_price)
-  }, [fromCoin, toCoin, parsedAmount])
+    const timer = setTimeout(fetchQuote, 500);
+    return () => clearTimeout(timer);
+  }, [fromAmount, fromAddr, toAddr, mode]);
 
   function swapSides() {
-    setFromId(toId)
-    setToId(fromId)
+    setFromAddr(toAddr)
+    setToAddr(fromAddr)
   }
 
-  function formatFiat(n: number) {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: n < 1 ? 6 : 2,
-    }).format(n)
+  const handleAction = async () => {
+    if (!isConnected || !walletAddress) {
+      alert("Please connect your wallet first.");
+      return;
+    }
+    setIsSwapping(true);
+    try {
+      if (mode === "swap") {
+        const rKey = pickRouter(fromAddr, toAddr);
+        const rAddr = ROUTERS[rKey].address;
+        const amountInWei = parseEther(fromAmount);
+        const wrapped = await resolveWrappedNative(rAddr);
+        const path = buildSwapPath(fromAddr, toAddr, wrapped);
+        
+        if (!isNativeAddr(fromAddr)) {
+          await approveToken(fromAddr, rAddr, amountInWei);
+        }
+
+        const hash = await swap({
+          routerKey: rKey,
+          routerAddr: rAddr,
+          tokenInAddr: fromAddr,
+          tokenOutAddr: toAddr,
+          amountInWei,
+          amountOutMinWei: 0n, 
+          recipient: walletAddress,
+          path
+        });
+        alert(`Swap Success! Tx: ${hash}`);
+      } else {
+        if (subMode === "add") {
+          const hash = await addLiquidity({
+            tokenAAddr: fromAddr,
+            tokenBAddr: toAddr,
+            amountAWei: parseEther(fromAmount),
+            amountBWei: parseEther(toAmount),
+            recipient: walletAddress
+          });
+          alert(`Liquidity Added! Tx: ${hash}`);
+        } else {
+          alert("Please use the 'Active Liquidity' cards to remove specific pairs.");
+        }
+      }
+    } catch (err: any) {
+      alert(`Error: ${errMsg(err)}`);
+    } finally {
+      setIsSwapping(false);
+    }
   }
 
-  function formatToken(n: number) {
-    const max = n < 1 ? 8 : 6
-    return new Intl.NumberFormat(undefined, {
-      maximumFractionDigits: max,
-    }).format(n)
+  const formatTokenDisplay = (n: string | number) => {
+    const val = typeof n === "string" ? parseFloat(n) : n;
+    return val.toLocaleString(undefined, { maximumFractionDigits: 6 });
   }
-
-  const loading = isLoading && !data
-  const stateError = !!error
-
-  const Price = ({ value }: { value: number }) => (
-    <div className="min-w-[80px] text-right">
-      <AnimatePresence mode="popLayout" initial={false}>
-        <motion.span
-          key={Number.isFinite(value) ? value.toFixed(6) : "na"}
-          initial={{ y: 8, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -8, opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="tabular-nums"
-        >
-          {formatFiat(value)}
-        </motion.span>
-      </AnimatePresence>
-    </div>
-  )
 
   return (
     <motion.section
@@ -185,7 +175,7 @@ export default function SwapCard({
           <p className="text-sm text-brand-text-muted">
             {mode === "pool" 
               ? (subMode === "add" ? "Provide liquidity and earn fees" : "Withdraw your liquidity and rewards")
-              : "Trade tokens instantly on LiteForge"}
+              : `Trading on ${ROUTERS[pickRouter(fromAddr, toAddr)].label}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -211,193 +201,134 @@ export default function SwapCard({
               </button>
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => mutate()}
-            className={[
-              "inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm",
-              "border border-brand-border bg-brand-surface-2 hover:bg-white/5 transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
-            ].join(" ")}
-            aria-label="Refresh prices"
-          >
-            <span className="sr-only sm:not-sr-only text-xs uppercase font-bold tracking-widest">Refresh</span>
-            ⟳
-          </button>
         </div>
       </header>
 
-      {loading && (
-        <div
-          className="animate-pulse rounded-md border border-brand-border bg-brand-surface-2 h-28"
-          aria-busy="true"
-          aria-live="polite"
-        />
-      )}
-
-      {stateError && (
-        <div
-          role="alert"
-          className="rounded-md border border-red-500/30 bg-red-500/10 text-red-500 px-3 py-2 text-sm"
-        >
-          Failed to load market data. Please try again.
-        </div>
-      )}
-
-      {!loading && !stateError && (
-        <>
-          {/* From */}
-          <div className="grid grid-cols-1 gap-3 sm:gap-4 items-end">
-            <div className="flex flex-col gap-2">
-              <label htmlFor="from-amount" className="text-xs uppercase font-bold text-brand-text-muted tracking-widest">
-                {mode === "pool" ? "Deposit" : "You pay"}
-              </label>
-              <div
-                className={[
-                  "flex items-center gap-3 rounded-md border border-brand-border bg-brand-bg px-3 py-2.5",
-                  "focus-within:ring-1 focus-within:ring-white",
-                ].join(" ")}
-              >
-                <TokenSelector
-                  coins={data ?? []}
-                  selectedId={fromId}
-                  onSelect={(id) => {
-                    if (id === toId) setToId(fromId)
-                    setFromId(id)
-                  }}
-                  side="from"
-                />
-                <input
-                  id="from-amount"
-                  inputMode="decimal"
-                  pattern="^[0-9]*[.,]?[0-9]*$"
-                  placeholder="0.00"
-                  className="flex-1 min-w-0 bg-transparent outline-none text-right text-lg sm:text-xl placeholder:text-brand-text-muted font-mono"
-                  value={fromAmount}
-                  onChange={(e) => {
-                    const v = e.target.value.replace(",", ".")
-                    if (v === "" || /^[0-9]*\.?[0-9]*$/.test(v)) setFromAmount(v)
-                  }}
-                  aria-label="Amount you pay"
-                />
-              </div>
-              {fromCoin && (
-                <div className="flex items-center justify-between text-[10px] text-brand-text-muted uppercase font-bold tracking-tighter">
-                  <span className="flex items-center gap-1">{fromCoin.name} price</span>
-                  <Price value={fromCoin.current_price} />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Swap or Pool button */}
-          <div className="flex items-center justify-center">
-            <motion.button
-              type="button"
-              onClick={swapSides}
-              className={[
-                "rounded-full border border-brand-border bg-brand-surface-2 hover:bg-white/10 px-4 py-2 text-xs font-bold uppercase",
-                "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
-              ].join(" ")}
-              whileTap={{ scale: 0.96, rotate: mode === "swap" ? 180 : 0 }}
-              aria-label={mode === "swap" ? "Swap tokens" : (subMode === "add" ? "Add liquidity" : "Remove liquidity")}
-              title={mode === "swap" ? "Swap tokens" : (subMode === "add" ? "Add liquidity" : "Remove liquidity")}
-            >
-              {mode === "swap" ? "⇅ Swap" : (subMode === "add" ? "+ Add" : "− Remove")}
-            </motion.button>
-          </div>
-
-          {/* To */}
-          <div className="grid grid-cols-1 gap-3 sm:gap-4 items-end">
-            <div className="flex flex-col gap-2">
-              <label htmlFor="to-amount" className="text-xs uppercase font-bold text-brand-text-muted tracking-widest">
-                {mode === "pool" ? "Deposit" : "You receive"}
-              </label>
-              <div
-                className={[
-                  "flex items-center gap-3 rounded-md border border-brand-border bg-brand-bg px-3 py-2.5",
-                  "focus-within:ring-1 focus-within:ring-white",
-                ].join(" ")}
-              >
-                <TokenSelector
-                  coins={data ?? []}
-                  selectedId={toId}
-                  onSelect={(id) => {
-                    if (id === fromId) setFromId(toId)
-                    setToId(id)
-                  }}
-                  side="to"
-                />
-                <output
-                  id="to-amount"
-                  className="flex-1 min-w-0 text-right text-lg sm:text-xl font-mono overflow-hidden truncate"
-                  aria-live="polite"
-                >
-                  {toCoin ? formatToken(toAmount) : "0"}
-                </output>
-              </div>
-              {toCoin && (
-                <div className="flex items-center justify-between text-[10px] text-brand-text-muted uppercase font-bold tracking-tighter">
-                  <span className="flex items-center gap-1">{toCoin.name} price</span>
-                  <Price value={toCoin.current_price} />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {fromCoin && toCoin && (
-            <motion.div
-              className="rounded-md border border-brand-border bg-brand-surface-2 px-3 py-2 text-[10px] font-bold uppercase tracking-tight"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              1 {fromCoin.symbol.toUpperCase()} ≈{" "}
-              {formatToken(fromCoin.current_price / toCoin.current_price)}{" "}
-              {toCoin.symbol.toUpperCase()} • 24h:{" "}
-              <span
-                className={(fromCoin.price_change_percentage_24h ?? 0) >= 0 ? "text-emerald-500" : "text-red-500"}
-              >
-                {(fromCoin.price_change_percentage_24h ?? 0).toFixed(2)}%
-              </span>
-            </motion.div>
-          )}
-
-          <motion.button
-            type="button"
-            disabled={!fromCoin || !toCoin || parsedAmount <= 0}
+      {/* From */}
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 items-end">
+        <div className="flex flex-col gap-2">
+          <label htmlFor="from-amount" className="text-xs uppercase font-bold text-brand-text-muted tracking-widest">
+            {mode === "pool" ? "Token A Amount" : "You pay"}
+          </label>
+          <div
             className={[
-              "w-full rounded-xl px-4 py-4 text-sm font-bold uppercase tracking-widest transition-all",
-              "bg-white text-black hover:opacity-90",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white shadow-[0_0_24px_rgba(255,255,255,0.1)]",
+              "flex items-center gap-3 rounded-md border border-brand-border bg-brand-bg px-3 py-2.5",
+              "focus-within:ring-1 focus-within:ring-white",
             ].join(" ")}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              if (mode === "swap") {
-                alert(
-                  `Simulated swap:
-  ${parsedAmount} ${fromCoin?.symbol.toUpperCase()} -> ${formatToken(
-                    toAmount,
-                  )} ${toCoin?.symbol.toUpperCase()}`,
-                )
-              } else {
-                alert(
-                  `Simulated pool ${subMode}:
-  ${subMode === "add" ? "Adding" : "Removing"} liquidity for ${fromCoin?.symbol.toUpperCase()} and ${toCoin?.symbol.toUpperCase()}`
-                )
-              }
-            }}
           >
-            {mode === "pool" ? (subMode === "add" ? "Add Liquidity Now" : "Remove Liquidity Now") : "Swap Now"}
-          </motion.button>
+            <TokenSelector
+              coins={data}
+              selectedId={fromAddr}
+              onSelect={(addr) => {
+                if (addr === toAddr) setToAddr(fromAddr)
+                setFromAddr(addr)
+              }}
+              side="from"
+            />
+            <input
+              id="from-amount"
+              inputMode="decimal"
+              pattern="^[0-9]*[.,]?[0-9]*$"
+              placeholder="0.00"
+              className="flex-1 min-w-0 bg-transparent outline-none text-right text-lg sm:text-xl placeholder:text-brand-text-muted font-mono"
+              value={fromAmount}
+              onChange={(e) => {
+                const v = e.target.value.replace(",", ".")
+                if (v === "" || /^[0-9]*\.?[0-9]*$/.test(v)) setFromAmount(v)
+              }}
+            />
+          </div>
+        </div>
+      </div>
 
-          {/* Footer */}
-          <footer className="flex items-center justify-between text-[9px] text-brand-text-muted font-bold uppercase tracking-[0.2em]">
-            <span>Powered by LiteForge Dex</span>
-            <span aria-label="Auto-refresh interval">Updates every 15s</span>
-          </footer>
-        </>
-      )}
+      <div className="flex items-center justify-center">
+        <motion.button
+          type="button"
+          onClick={swapSides}
+          className={[
+            "rounded-full border border-brand-border bg-brand-surface-2 hover:bg-white/10 px-4 py-2 text-xs font-bold uppercase",
+            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
+          ].join(" ")}
+          whileTap={{ scale: 0.96 }}
+        >
+          {mode === "swap" ? "⇅ Swap" : "⇅"}
+        </motion.button>
+      </div>
+
+      {/* To */}
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 items-end">
+        <div className="flex flex-col gap-2">
+          <label htmlFor="to-amount" className="text-xs uppercase font-bold text-brand-text-muted tracking-widest">
+            {mode === "pool" ? "Token B Amount" : "You receive"}
+          </label>
+          <div
+            className={[
+              "flex items-center gap-3 rounded-md border border-brand-border bg-brand-bg px-3 py-2.5",
+              "focus-within:ring-1 focus-within:ring-white",
+            ].join(" ")}
+          >
+            <TokenSelector
+              coins={data}
+              selectedId={toAddr}
+              onSelect={(addr) => {
+                if (addr === fromAddr) setFromAddr(toAddr)
+                setToAddr(addr)
+              }}
+              side="to"
+            />
+            {mode === "pool" ? (
+               <input
+               id="to-amount"
+               inputMode="decimal"
+               pattern="^[0-9]*[.,]?[0-9]*$"
+               placeholder="0.00"
+               className="flex-1 min-w-0 bg-transparent outline-none text-right text-lg sm:text-xl placeholder:text-brand-text-muted font-mono"
+               value={toAmount}
+               onChange={(e) => {
+                 const v = e.target.value.replace(",", ".")
+                 if (v === "" || /^[0-9]*\.?[0-9]*$/.test(v)) setToAmount(v)
+               }}
+             />
+            ) : (
+              <output
+                id="to-amount"
+                className={cn(
+                  "flex-1 min-w-0 text-right text-lg sm:text-xl font-mono overflow-hidden truncate",
+                  isLoadingQuote && "animate-pulse opacity-50"
+                )}
+              >
+                {isLoadingQuote ? "..." : formatTokenDisplay(toAmount)}
+              </output>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <motion.button
+        type="button"
+        disabled={!isConnected || isSwapping || parseFloat(fromAmount) <= 0}
+        className={[
+          "w-full rounded-xl px-4 py-4 text-sm font-bold uppercase tracking-widest transition-all",
+          "bg-white text-black hover:opacity-90",
+          "disabled:opacity-50 disabled:cursor-not-allowed",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white shadow-[0_0_24px_rgba(255,255,255,0.1)]",
+        ].join(" ")}
+        whileTap={{ scale: 0.98 }}
+        onClick={handleAction}
+      >
+        {!isConnected 
+          ? "Connect Wallet" 
+          : isSwapping 
+            ? "Processing..." 
+            : mode === "pool" 
+              ? (subMode === "add" ? "Add Liquidity" : "Remove Liquidity") 
+              : "Swap Now"}
+      </motion.button>
+
+      <footer className="flex items-center justify-between text-[9px] text-brand-text-muted font-bold uppercase tracking-[0.2em]">
+        <span>Powered by LitDeX</span>
+        <span>Real-time quotes</span>
+      </footer>
     </motion.section>
   )
 }
@@ -410,10 +341,10 @@ function TokenSelector({
 }: {
   coins: Coin[]
   selectedId: string
-  onSelect: (id: string) => void
+  onSelect: (addr: string) => void
   side: "from" | "to"
 }) {
-  const selected = coins.find((c) => c.id === selectedId) ?? coins[0]
+  const selected = coins.find((c) => c.address === selectedId) ?? coins[0]
 
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState("")
@@ -427,9 +358,8 @@ function TokenSelector({
     if (!q) return coins
     return coins.filter(
       (c) =>
-        c.name.toLowerCase().includes(q) ||
         c.symbol.toLowerCase().includes(q) ||
-        (c.market_cap_rank ? String(c.market_cap_rank).includes(q) : false),
+        c.address.toLowerCase().includes(q)
     )
   }, [coins, query])
 
@@ -454,7 +384,7 @@ function TokenSelector({
       e.preventDefault()
       const item = filtered[activeIndex]
       if (item) {
-        onSelect(item.id)
+        onSelect(item.address)
         setOpen(false)
         buttonRef.current?.focus()
       }
@@ -496,7 +426,7 @@ function TokenSelector({
       >
         <img
           src={selected?.image || "/placeholder.svg"}
-          alt={`${selected?.name} logo`}
+          alt={`${selected?.symbol} logo`}
           width={20}
           height={20}
           className="size-5 rounded-full border border-brand-border object-cover"
@@ -504,9 +434,6 @@ function TokenSelector({
           referrerPolicy="no-referrer"
         />
         <span className="font-bold">{selected?.symbol?.toUpperCase()}</span>
-        <span className="text-brand-text-muted hidden sm:inline-block text-[10px] uppercase font-bold tracking-widest ml-1">
-          {selected?.name}
-        </span>
         <span aria-hidden="true" className="ml-1 text-[8px]">▼</span>
       </button>
 

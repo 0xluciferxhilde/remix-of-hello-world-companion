@@ -26,25 +26,23 @@ const containerVariants = {
     opacity: 1,
     width: "auto",
     transition: {
-      y: { type: "spring", damping: 18, stiffness: 250 },
-      opacity: { duration: 0.3 },
-      type: "spring",
-      damping: 20,
-      stiffness: 300,
-      staggerChildren: 0.07,
-      delayChildren: 0.2,
+      y: { type: "spring", damping: 20, stiffness: 300 },
+      opacity: { duration: 0.2 },
+      width: { type: "spring", damping: 25, stiffness: 300 },
+      staggerChildren: 0.05,
+      delayChildren: 0.1,
     },
   },
   collapsed: {
     y: 0,
     opacity: 1,
-    width: "3rem",
+    width: "4rem",
     transition: {
       type: "spring",
-      damping: 20,
-      stiffness: 300,
+      damping: 25,
+      stiffness: 400,
       when: "afterChildren",
-      staggerChildren: 0.05,
+      staggerChildren: 0.03,
       staggerDirection: -1,
     },
   },
@@ -52,12 +50,12 @@ const containerVariants = {
 
 const logoVariants = {
   expanded: { opacity: 1, x: 0, rotate: 0, transition: { type: "spring", damping: 15 } },
-  collapsed: { opacity: 0, x: -25, rotate: -180, transition: { duration: 0.3 } },
+  collapsed: { opacity: 0, x: -10, rotate: -90, transition: { duration: 0.2 } },
 };
 
 const itemVariants = {
-  expanded: { opacity: 1, x: 0, scale: 1, transition: { type: "spring", damping: 15 } },
-  collapsed: { opacity: 0, x: -20, scale: 0.95, transition: { duration: 0.2 } },
+  expanded: { opacity: 1, x: 0, scale: 1, transition: { type: "spring", damping: 20 } },
+  collapsed: { opacity: 0, x: -10, scale: 0.8, transition: { duration: 0.15 } },
 };
 
 const collapsedIconVariants = {
