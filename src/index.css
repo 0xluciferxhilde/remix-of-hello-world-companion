@@ -1,0 +1,46 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-brand-bg: #000000;
+  --color-brand-surface: #0a0a0a;
+  --color-brand-surface-2: #141414;
+  --color-brand-border: #1f1f1f;
+  --color-brand-text-primary: #FFFFFF;
+  --color-brand-text-muted: #737373;
+  --color-brand-teal: #FFFFFF;
+  --color-brand-teal-glow: rgba(255, 255, 255, 0.1);
+  --color-brand-danger: #F85149;
+  --color-brand-warning: #F0883E;
+}
+
+@layer base {
+  body {
+    @apply bg-brand-bg text-brand-text-primary font-sans antialiased selection:bg-brand-teal/30;
+  }
+}
+
+.teal-glow-hover:hover {
+  box-shadow: 0 0 24px var(--color-brand-teal-glow);
+  @apply border-brand-teal/40;
+}
+
+/* Custom transitions */
+.page-transition-enter {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.page-transition-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+
+/* Tabular numbers for DeFi data */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
