@@ -51,6 +51,13 @@ interface NavItemProps {
 
 // --- Components ---
 
+const LogoLD = ({ className = "", size = 20 }: { className?: string; size?: number }) => (
+  <div className={cn("relative flex items-center justify-center font-black italic tracking-tighter cursor-default", className)}>
+    <span style={{ fontSize: size }} className="text-black leading-none drop-shadow-sm select-none">L</span>
+    <span style={{ fontSize: size }} className="text-black leading-none -ml-[0.1em] drop-shadow-sm select-none">D</span>
+  </div>
+);
+
 const NavItem = ({ icon: Icon, title, desc, badge, onClick }: NavItemProps) => (
   <button 
     onClick={onClick}
@@ -627,33 +634,36 @@ const MessengerPage = () => (
 
 // --- Page: Faucet ---
 const FaucetPage = () => (
-  <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto py-24 px-4 text-center">
-    <div className="mb-12">
-      <h1 className="text-5xl font-bold mb-4 tracking-tighter">Faucet</h1>
-      <p className="text-brand-text-muted text-xl">Get 1,000 wzkLTC to test the protocol.</p>
+  <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-lg mx-auto py-8 md:py-12 px-4 text-center">
+    <div className="mb-6">
+      <h1 className="text-3xl md:text-4xl font-bold mb-2 tracking-tighter">Faucet</h1>
+      <p className="text-brand-text-muted text-base md:text-lg">Get 1,000 wzkLTC to test the protocol.</p>
     </div>
 
-    <div className="bg-brand-surface border border-brand-border p-5 rounded-2xl mb-8 flex items-center justify-between mx-auto max-w-2xl text-left">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-           <Layers size={18} className="text-white" />
+    <div className="bg-brand-surface border border-brand-border p-3.5 rounded-xl mb-5 flex items-center justify-between mx-auto max-w-md text-left">
+      <div className="flex items-center gap-2.5">
+        <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center">
+           <LogoLD size={12} className="opacity-80" />
         </div>
-        <span className="text-brand-text-muted font-medium">Your wzkLTC balance</span>
+        <span className="text-brand-text-muted font-medium text-xs">Your wzkLTC balance</span>
       </div>
-      <span className="font-bold">0 wzkLTC</span>
+      <span className="font-bold text-xs">0 wzkLTC</span>
     </div>
 
-    <Card className="max-w-2xl mx-auto py-16 px-8 flex flex-col items-center">
-      <div className="w-24 h-24 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center mb-10 shadow-2xl">
-         <Layers size={48} className="text-white" />
+    <Card className="max-w-md mx-auto py-8 px-6 flex flex-col items-center border border-white/5 bg-black/20">
+      <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-6 shadow-2xl relative overflow-hidden group">
+         <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+         <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+           <LogoLD size={20} />
+         </div>
       </div>
       
-      <div className="mb-12">
-        <h2 className="text-6xl font-bold tabular-nums mb-2">1,000</h2>
-        <p className="text-brand-text-muted font-medium">wzkLTC per claim</p>
+      <div className="mb-8">
+        <h2 className="text-4xl font-bold tabular-nums mb-1 tracking-tight">1,000</h2>
+        <p className="text-brand-text-muted font-medium text-[10px] uppercase tracking-[0.2em] opacity-50">wzkLTC per claim</p>
       </div>
 
-      <button className="w-full py-5 bg-white text-black rounded-full font-bold text-xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_40px_rgba(255,255,255,0.1)]">
+      <button className="w-full py-3.5 bg-white text-black rounded-xl font-bold text-base hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_30px_rgba(255,255,255,0.1)]">
         Claim 1,000 wzkLTC
       </button>
     </Card>
@@ -706,60 +716,81 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-brand-bg text-brand-text-primary selection:bg-brand-teal/30">
-      {/* Bottom Left Tools */}
-      <div className="fixed bottom-8 left-8 z-50 hidden lg:flex items-center gap-3">
-        <button 
-          onClick={() => setActivePage('faucet')}
-          className="group flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-[10px] font-bold uppercase tracking-[0.2em] text-white/80 backdrop-blur-xl shadow-2xl"
-        >
-          <Droplets size={14} className="group-hover:text-white transition-colors" />
-          Faucet
-        </button>
+    <div className="min-h-screen bg-brand-bg text-brand-text-primary selection:bg-brand-teal/30 flex flex-col">
+      {/* Top Left Logo */}
+      <div className="fixed top-8 left-8 z-50 flex items-center gap-3 group cursor-pointer" onClick={() => setActivePage('swap')}>
+        <div className="relative">
+          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.2)] group-hover:shadow-[0_0_30px_rgba(255,255,255,0.4)] transition-all duration-500">
+            <LogoLD size={22} />
+          </div>
+          <div className="absolute -inset-1 bg-white/20 blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        </div>
+        <div className="flex flex-col -gap-1">
+          <span className="text-lg sm:text-xl font-black tracking-tighter text-white leading-none">LitDeX</span>
+          <span className="hidden sm:block text-[8px] font-bold tracking-[0.4em] text-white/40 uppercase leading-none mt-1">Ecosystem</span>
+        </div>
       </div>
 
-      {/* Top Right Tools */}
-      <div className="fixed top-8 right-8 z-50 hidden lg:flex items-center gap-3">
-        <button className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white text-black hover:bg-white/90 active:scale-95 transition-all text-[9px] font-bold uppercase tracking-[0.2em] shadow-[0_0_40px_rgba(255,255,255,0.15)]">
-          <Wallet size={14} />
-          Connect
-        </button>
+      <div className="flex-1 relative flex flex-col">
+        {/* Floating Tools Overlay - Handles sticking and stopping at footer */}
+        <div className="absolute inset-0 pointer-events-none z-50">
+          <div className="sticky top-[calc(100vh-96px)] flex justify-between items-end px-8 pointer-events-auto">
+            {/* Bottom Left Tools */}
+            <div className="hidden lg:flex items-center gap-3">
+              <button 
+                onClick={() => setActivePage('faucet')}
+                className="group flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-[10px] font-bold uppercase tracking-[0.2em] text-white/80 backdrop-blur-xl shadow-2xl"
+              >
+                <Droplets size={14} className="group-hover:text-white transition-colors" />
+                Faucet
+              </button>
+            </div>
+
+            {/* Bottom Right Tools */}
+            <div>
+              <button className="relative w-14 h-14 flex items-center justify-center rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-white/60 backdrop-blur-xl shadow-2xl group">
+                <Bell size={20} className="group-hover:text-white transition-colors" />
+                <div className="absolute top-4 right-4 w-2 h-2 bg-white rounded-full ring-4 ring-brand-bg shadow-[0_0_12px_rgba(255,255,255,0.8)]" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Top Right Tools (Kept Fixed/Top for now as it doesn't collide with footer) */}
+        <div className="fixed top-8 right-8 z-50 hidden lg:flex items-center gap-3">
+          <button className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white text-black hover:bg-white/90 active:scale-95 transition-all text-[9px] font-bold uppercase tracking-[0.2em] shadow-[0_0_40px_rgba(255,255,255,0.15)]">
+            <Wallet size={14} />
+            Connect
+          </button>
+        </div>
+
+        <AnimatedNavFramer 
+          onPageChange={(page) => setActivePage(page as PageID)} 
+          activePage={activePage}
+        />
+
+        {/* Main Content */}
+        <main className="container mx-auto px-6 pt-24 pb-12 flex-1">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activePage}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+            >
+              {renderPage()}
+            </motion.div>
+          </AnimatePresence>
+        </main>
       </div>
-
-      {/* Bottom Right Tools */}
-      <div className="fixed bottom-8 right-8 z-50">
-        <button className="relative w-14 h-14 flex items-center justify-center rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-white/60 backdrop-blur-xl shadow-2xl group">
-          <Bell size={20} className="group-hover:text-white transition-colors" />
-          <div className="absolute top-4 right-4 w-2 h-2 bg-white rounded-full ring-4 ring-brand-bg shadow-[0_0_12px_rgba(255,255,255,0.8)]" />
-        </button>
-      </div>
-
-      <AnimatedNavFramer 
-        onPageChange={(page) => setActivePage(page as PageID)} 
-        activePage={activePage}
-      />
-
-      {/* Main Content */}
-      <main className="container mx-auto px-6 pt-24">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activePage}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-          >
-            {renderPage()}
-          </motion.div>
-        </AnimatePresence>
-      </main>
 
       {/* Footer */}
-      <footer className="border-t border-brand-border py-12 mt-24">
+      <footer className="border-t border-brand-border py-12 relative z-50 bg-brand-bg">
         <div className="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-md bg-brand-surface border border-brand-border flex items-center justify-center text-white text-sm font-bold">
-              <Layers size={14} />
+            <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-white text-sm font-bold">
+              <LogoLD size={14} />
             </div>
             <span className="text-brand-text-muted text-xs font-mono">LitDeX Mainnet v1.0.4-stable</span>
           </div>

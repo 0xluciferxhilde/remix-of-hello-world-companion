@@ -15,6 +15,7 @@ const navItems = [
   { name: "Check-in", id: "checkin" },
   { name: "Messenger", id: "messenger" },
   { name: "Socials", id: "quests" },
+  { name: "Games", id: "games" },
 ];
 
 const EXPAND_SCROLL_THRESHOLD = 80;
@@ -107,7 +108,7 @@ export function AnimatedNavFramer({ activePage, onPageChange }: { activePage: st
 
   return (
     <>
-    <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[95vw]">
+    <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[90vw] md:max-w-none">
       <motion.nav
         initial={{ y: -80, opacity: 0 }}
         animate={isExpanded ? "expanded" : "collapsed"}
@@ -116,7 +117,7 @@ export function AnimatedNavFramer({ activePage, onPageChange }: { activePage: st
         whileTap={!isExpanded ? { scale: 0.95 } : {}}
         onClick={handleNavClick}
         className={cn(
-          "flex items-center overflow-hidden rounded-full border bg-black/40 shadow-2xl backdrop-blur-xl h-16 border-white/5 px-4",
+          "flex items-center overflow-hidden rounded-full border bg-black/40 shadow-2xl backdrop-blur-xl h-14 sm:h-16 border-white/5 px-2 sm:px-4",
           !isExpanded && "cursor-pointer justify-center"
         )}
       >
@@ -129,8 +130,8 @@ export function AnimatedNavFramer({ activePage, onPageChange }: { activePage: st
         
         <motion.div
           className={cn(
-            "flex items-center gap-1 sm:gap-3 pr-3",
-            !isExpanded && "pointer-events-none" 
+            "flex items-center gap-1 sm:gap-2 pr-3 overflow-x-auto no-scrollbar scroll-smooth",
+            !isExpanded && "pointer-events-none overflow-hidden" 
           )}
         >
           {navItems.map((item) => (
@@ -142,10 +143,17 @@ export function AnimatedNavFramer({ activePage, onPageChange }: { activePage: st
                   onPageChange(item.id);
               }}
               className={cn(
-                "text-[11px] font-bold uppercase tracking-[0.2em] transition-all px-3 py-2 whitespace-nowrap",
+                "relative text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] transition-all px-3 py-2 whitespace-nowrap rounded-lg",
                 activePage === item.id ? "text-white" : "text-brand-text-muted hover:text-white"
               )}
             >
+              {activePage === item.id && (
+                <motion.div 
+                  layoutId="nav-pill"
+                  className="absolute inset-0 bg-white/10 rounded-lg -z-10"
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                />
+              )}
               {item.name}
             </motion.button>
           ))}
