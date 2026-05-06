@@ -6,7 +6,7 @@ import { parseEther, formatEther, Contract } from "ethers"
 import { 
   SWAP_TOKENS, 
   NATIVE_SENTINEL, 
-  quoteSwap, 
+  getSwapQuote, 
   swap, 
   pickRouter, 
   ROUTERS, 
@@ -53,6 +53,9 @@ export default function SwapCard({
   const [isLoadingQuote, setIsLoadingQuote] = React.useState(false)
   const [isSwapping, setIsSwapping] = React.useState(false)
   const [subMode, setSubMode] = React.useState<"add" | "remove">("add")
+  const [activeRouter, setActiveRouter] = React.useState<string>("")
+  const [activeRouterKey, setActiveRouterKey] = React.useState<any>("liteswap")
+  const [activePath, setActivePath] = React.useState<string[]>([])
 
   const coinMap = React.useMemo(() => {
     const map = new Map<string, Coin>()
@@ -74,16 +77,19 @@ export default function SwapCard({
 
       setIsLoadingQuote(true);
       try {
-        const rKey = pickRouter(fromAddr, toAddr);
-        const rAddr = ROUTERS[rKey].address;
-        const wrapped = await resolveWrappedNative(rAddr);
-        const path = buildSwapPath(fromAddr, toAddr, wrapped);
-        const amountInWei = parseEther(fromAmount);
-        const outWei = await quoteSwap(rAddr, amountInWei, path);
-        setToAmount(formatEther(outWei));
+        const { amountOut, router, routerKey, path } = await getSwapQuote(
+          fromAddr === NATIVE_SENTINEL ? "NATIVE" : fromAddr,
+          toAddr === NATIVE_SENTINEL ? "NATIVE" : toAddr,
+          fromAmount
+        );
+        setToAmount(amountOut);
+        setActiveRouter(router);
+        setActiveRouterKey(routerKey);
+        setActivePath(path);
       } catch (err) {
         console.error("Quote error:", err);
         setToAmount("0");
+        setActiveRouter("Error");
       } finally {
         setIsLoadingQuote(false);
       }
@@ -106,11 +112,10 @@ export default function SwapCard({
     setIsSwapping(true);
     try {
       if (mode === "swap") {
-        const rKey = pickRouter(fromAddr, toAddr);
+        const rKey = activeRouterKey;
         const rAddr = ROUTERS[rKey].address;
         const amountInWei = parseEther(fromAmount);
-        const wrapped = await resolveWrappedNative(rAddr);
-        const path = buildSwapPath(fromAddr, toAddr, wrapped);
+        const path = activePath;
         
         if (!isNativeAddr(fromAddr)) {
           await approveToken(fromAddr, rAddr, amountInWei);
@@ -326,7 +331,12 @@ export default function SwapCard({
       </motion.button>
 
       <footer className="flex items-center justify-between text-[9px] text-brand-text-muted font-bold uppercase tracking-[0.2em]">
-        <span>Powered by LitDeX</span>
+        <div className="flex flex-col gap-1">
+          <span>Powered by LitDeX</span>
+          {activeRouter && mode === "swap" && (
+            <span className="text-white opacity-60">Routed via {activeRouter}</span>
+          )}
+        </div>
         <span>Real-time quotes</span>
       </footer>
     </motion.section>

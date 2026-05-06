@@ -22,7 +22,7 @@
  * ----------------------------------------------------------------------------
  */
 
-import { BrowserProvider, Contract, JsonRpcProvider } from "ethers";
+import { BrowserProvider, Contract, JsonRpcProvider, parseEther, formatEther } from "ethers";
 import { defineChain, parseAbi } from "viem";
 import { http } from "wagmi";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
@@ -264,44 +264,68 @@ export const POPULAR_TOKENS: Token[] = [
   { 
     address: "0xFC43ABE529CDC61B7F0aa2e677451AFd83d2B304", 
     symbol: "USDC", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/usdc.png" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/USDC.png" 
   },
   { 
     address: "0x6858790e164a8761a711BAD1178220C5AebcF7eC", 
     symbol: "PEPE", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/pepe.png" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/PEPE.png" 
   },
   { 
     address: "0xa38c318a0B755154b25f28cAD7b2312747B073C6", 
     symbol: "USDT", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/usdt.png" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/USDT.png" 
   },
   { 
     address: "0xFC73cdB75F37B0da829c4e54511f410D525B76b2", 
     symbol: "Lester", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/lester.png" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/Lester.png" 
   },
   { 
     address: "0x68Bf11e64cfD939fE1761012862FBFE47048118e", 
     symbol: "WETH", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/weth.png" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/WETH.png" 
   },
   { 
     address: "0xcFe6BE457D366329CCdeE7fBC48aBf1d6FFeB9C0", 
     symbol: "WBTC", 
-    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/wbtc.png" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/WBTC.png" 
   },
   { 
     address: "0xBAaba603e6298fbb76325a6B0d47Cd57154ca641", 
     symbol: "LDEX", 
     image: "" // Handled specially
   },
-  { address: "0x314522DD1B3f74Dd1DdE03E5B5a628C28134b25d", symbol: "zkPEPE" },
-  { address: "0xaf9F497007342Dd025Ff696964A736Ec9584c3dd", symbol: "zkETH" },
-  { address: "0xF425553A84e579BE353a6180F7d53d8101bfb3E4", symbol: "LDTOAD" },
-  { address: "0x60DD65bAd8a73Dfd8DF029C4e3b372d575B03BC2", symbol: "USDC.t" },
-  { address: "0xd8C4e6dBe48472d6C563eB1cc330207d020D4c8f", symbol: "YURI" },
-  { address: "0x05149f41AFE7ca712D6A42390e8047E0f2887284", symbol: "CHAWLEE" },
+  { 
+    address: "0x314522DD1B3f74Dd1DdE03E5B5a628C28134b25d", 
+    symbol: "zkPEPE", 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/zkPEPE.png" 
+  },
+  { 
+    address: "0xaf9F497007342Dd025Ff696964A736Ec9584c3dd", 
+    symbol: "zkETH", 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/zkETH.png" 
+  },
+  { 
+    address: "0xF425553A84e579BE353a6180F7d53d8101bfb3E4", 
+    symbol: "LDTOAD", 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/LDTOAD.png" 
+  },
+  { 
+    address: "0x60DD65bAd8a73Dfd8DF029C4e3b372d575B03BC2", 
+    symbol: "USDC.t", 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/USDC.png" 
+  },
+  { 
+    address: "0xd8C4e6dBe48472d6C563eB1cc330207d020D4c8f", 
+    symbol: "YURI", 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/YURI.png" 
+  },
+  { 
+    address: "0x05149f41AFE7ca712D6A42390e8047E0f2887284", 
+    symbol: "CHAWLEE", 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/CHAWLEE.png" 
+  },
 ];
 
 export const SWAP_TOKENS: Token[] = [
@@ -994,7 +1018,48 @@ export type TokenInfo = {
   deployedAt: bigint;
 };
 
-export type SilentRecordKind = "swap" | "lp" | "deploy";
+/** Get on-chain swap quote using routers. */
+export async function getSwapQuote(
+  tokenIn: string,   // "NATIVE" for zkLTC
+  tokenOut: string,  // token address
+  amountIn: string   // human readable amount e.g. "1"
+): Promise<{ amountOut: string, router: string, routerKey: RouterKey, path: string[] }> {
+  // Build path
+  const tokenInAddr = tokenIn === "NATIVE" ? WZKLTC_ADDR : tokenIn;
+  const tokenOutAddr = tokenOut === "NATIVE" ? WZKLTC_ADDR : tokenOut;
+  
+  if (tokenInAddr.toLowerCase() === tokenOutAddr.toLowerCase()) {
+    return { amountOut: amountIn, router: "Direct", routerKey: "liteswap", path: [tokenInAddr] };
+  }
+
+  const path = [tokenInAddr, tokenOutAddr];
+  const amountInWei = parseEther(amountIn || "0");
+  if (amountInWei === 0n) return { amountOut: "0", router: "--", routerKey: "liteswap", path };
+
+  // Try LiteSwap first
+  try {
+    const router = new Contract(LITESWAP_ROUTER, ROUTER_ABI, readProvider);
+    const amounts = await router.getAmountsOut(amountInWei, path);
+    return { amountOut: formatEther(amounts[amounts.length - 1]), router: "LiteSwap", routerKey: "liteswap", path };
+  } catch (e) {
+    // Try OmniFun router
+    try {
+      const router = new Contract(OMNIFUN_ROUTER, ROUTER_ABI, readProvider);
+      const amounts = await router.getAmountsOut(amountInWei, path);
+      return { amountOut: formatEther(amounts[amounts.length - 1]), router: "OmniFun", routerKey: "omnifun", path };
+    } catch (e2) {
+      // Try multi-hop via WZKLTC on LiteSwap
+      try {
+        const router = new Contract(LITESWAP_ROUTER, ROUTER_ABI, readProvider);
+        const multiPath = [tokenInAddr, WZKLTC_ADDR, tokenOutAddr];
+        const amounts = await router.getAmountsOut(amountInWei, multiPath);
+        return { amountOut: formatEther(amounts[amounts.length - 1]), router: "LiteSwap (Hop)", routerKey: "liteswap", path: multiPath };
+      } catch (e3) {
+        throw new Error("No liquidity found for this pair");
+      }
+    }
+  }
+}
 
 // --- Section 17: Additional Helpers for App Integration ---
 
