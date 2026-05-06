@@ -13,13 +13,18 @@ import {
   resolveWrappedNative, 
   buildSwapPath, 
   approveToken,
+  getAllowance,
+  litvmChain,
   ERC20_ABI,
   isNativeAddr,
   errMsg,
   loadPair,
   addLiquidity,
   removeLiquidity,
-  DEFAULT_ROUTER
+  DEFAULT_ROUTER,
+  getUserLPPositions,
+  LPPosition,
+  readProvider
 } from "@/lib/litdex-core-logic"
 
 type Coin = {
@@ -56,6 +61,55 @@ export default function SwapCard({
   const [activeRouter, setActiveRouter] = React.useState<string>("")
   const [activeRouterKey, setActiveRouterKey] = React.useState<any>("liteswap")
   const [activePath, setActivePath] = React.useState<string[]>([])
+  const [lpPositions, setLpPositions] = React.useState<LPPosition[]>([])
+  const [loadingPositions, setLoadingPositions] = React.useState(false)
+  const [poolShare, setPoolShare] = React.useState<string>("0")
+  const [selectedLp, setSelectedLp] = React.useState<LPPosition | null>(null)
+  const [removePercent, setRemovePercent] = React.useState<number>(100)
+  const [needsApprovalFrom, setNeedsApprovalFrom] = React.useState(false)
+  const [needsApprovalTo, setNeedsApprovalTo] = React.useState(false)
+  const [isApproving, setIsApproving] = React.useState(false)
+  const [txHash, setTxHash] = React.useState<string | null>(null)
+  const [txStatus, setTxStatus] = React.useState<"success" | "failed" | null>(null)
+
+  const checkAllowances = React.useCallback(async () => {
+    if (!walletAddress || !fromAddr || (!toAddr && subMode !== "remove")) return;
+
+    try {
+      const routerAddr = mode === "swap" ? ROUTERS[activeRouterKey]?.address : DEFAULT_ROUTER;
+      if (!routerAddr) return;
+
+      const [allowFrom, allowTo] = await Promise.all([
+        subMode === "remove" && selectedLp 
+          ? getAllowance(selectedLp.pairAddress, walletAddress, routerAddr)
+          : getAllowance(fromAddr, walletAddress, routerAddr),
+        mode === "pool" && subMode === "add" ? getAllowance(toAddr, walletAddress, routerAddr) : Promise.resolve(parseEther("1000000000"))
+      ]);
+
+      const amountInWei = mode === "pool" && subMode === "remove" && selectedLp
+        ? (selectedLp.lpBalance * BigInt(Math.floor(removePercent))) / 100n
+        : parseEther(fromAmount || "0");
+      const amountOutWei = parseEther(toAmount || "0");
+
+      setNeedsApprovalFrom(
+        (mode === "pool" && subMode === "remove" && selectedLp) 
+          ? allowFrom < amountInWei 
+          : (!isNativeAddr(fromAddr) && allowFrom < amountInWei)
+      );
+      setNeedsApprovalTo(mode === "pool" && subMode === "add" && !isNativeAddr(toAddr) && allowTo < amountOutWei);
+    } catch (err) {
+      console.error("Allowance check error:", err);
+    }
+  }, [walletAddress, fromAddr, toAddr, fromAmount, toAmount, mode, subMode, activeRouterKey]);
+
+  React.useEffect(() => {
+    checkAllowances();
+  }, [checkAllowances]);
+
+  React.useEffect(() => {
+    setTxStatus(null);
+    setTxHash(null);
+  }, [fromAddr, toAddr, fromAmount, toAmount, mode, subMode]);
 
   const coinMap = React.useMemo(() => {
     const map = new Map<string, Coin>()
@@ -63,17 +117,76 @@ export default function SwapCard({
     return map
   }, [data])
 
-  const fromCoin = fromAddr ? coinMap.get(fromAddr) : undefined
-  const toCoin = toAddr ? coinMap.get(toAddr) : undefined
+  const fetchPositions = React.useCallback(async () => {
+    if (!walletAddress) return;
+    setLoadingPositions(true);
+    try {
+      const p = await getUserLPPositions(walletAddress);
+      setLpPositions(p);
+    } catch (err) {
+      console.error("Fetch positions error:", err);
+    } finally {
+      setLoadingPositions(false);
+    }
+  }, [walletAddress]);
+
+  React.useEffect(() => {
+    if (isConnected && walletAddress) {
+      fetchPositions();
+    }
+  }, [isConnected, walletAddress, fetchPositions]);
+
+  // Pool ratio / Share logic
+  React.useEffect(() => {
+    const updatePoolState = async () => {
+      if (mode !== "pool" || subMode !== "add") return;
+      if (!fromAddr || !toAddr || fromAddr === toAddr || !fromAmount || isNaN(Number(fromAmount)) || Number(fromAmount) <= 0) {
+        setPoolShare("0");
+        return;
+      }
+
+      try {
+        const state = await loadPair(fromAddr, toAddr, walletAddress || undefined);
+        if (state.pairAddress && state.totalSupply > 0n) {
+          // Token0 vs Token1 reserves
+          const r0 = state.reserves[0];
+          const r1 = state.reserves[1];
+          
+          const resolvedFrom = isNativeAddr(fromAddr) ? "0x60A84eBC3483fEFB251B76Aea5B8458026Ef4bea" : fromAddr; // WZKLTC_ADDR
+          const fromIsToken0 = resolvedFrom.toLowerCase() === state.token0.toLowerCase();
+          
+          // amountB = amountA * reserveB / reserveA
+          const amtA = parseEther(fromAmount);
+          let amtB = 0n;
+          if (fromIsToken0) {
+            amtB = (amtA * r1) / r0;
+          } else {
+            amtB = (amtA * r0) / r1;
+          }
+          setToAmount(formatEther(amtB));
+
+          // Est. Share: (amtA / (rA + amtA)) * 100
+          const shareBps = (amtA * 10000n) / (fromIsToken0 ? r0 + amtA : r1 + amtA);
+          setPoolShare((Number(shareBps) / 100).toFixed(2));
+        } else {
+          setPoolShare("100"); // Initial provider
+        }
+      } catch (err) {
+        console.error("Pool ratio error:", err);
+      }
+    };
+
+    updatePoolState();
+  }, [fromAmount, fromAddr, toAddr, mode, subMode, walletAddress]);
 
   // Quote logic
   React.useEffect(() => {
     const fetchQuote = async () => {
+      if (mode === "pool") return; 
       if (!fromAmount || isNaN(Number(fromAmount)) || Number(fromAmount) <= 0 || !fromAddr || !toAddr || fromAddr === toAddr) {
         setToAmount("0");
         return;
       }
-      if (mode === "pool") return; 
 
       setIsLoadingQuote(true);
       try {
@@ -99,9 +212,34 @@ export default function SwapCard({
     return () => clearTimeout(timer);
   }, [fromAmount, fromAddr, toAddr, mode]);
 
+  const [rotation, setRotation] = React.useState(0)
+
   function swapSides() {
     setFromAddr(toAddr)
     setToAddr(fromAddr)
+    setRotation(r => r + 360)
+  }
+
+  const handleApprove = async (side: "from" | "to") => {
+    if (!isConnected || !walletAddress) return;
+    const addr = side === "from" ? fromAddr : toAddr;
+    const amount = side === "from" ? fromAmount : toAmount;
+    const routerAddr = mode === "swap" ? ROUTERS[activeRouterKey]?.address : DEFAULT_ROUTER;
+
+    setIsApproving(true);
+    setTxStatus(null);
+    setTxHash(null);
+    try {
+      const hash = await approveToken(addr, routerAddr, parseEther(amount));
+      setTxHash(hash);
+      setTxStatus("success");
+      await checkAllowances();
+    } catch (err) {
+      console.error("Approval error:", err);
+      setTxStatus("failed");
+    } finally {
+      setIsApproving(false);
+    }
   }
 
   const handleAction = async () => {
@@ -110,6 +248,8 @@ export default function SwapCard({
       return;
     }
     setIsSwapping(true);
+    setTxStatus(null);
+    setTxHash(null);
     try {
       if (mode === "swap") {
         const rKey = activeRouterKey;
@@ -117,10 +257,6 @@ export default function SwapCard({
         const amountInWei = parseEther(fromAmount);
         const path = activePath;
         
-        if (!isNativeAddr(fromAddr)) {
-          await approveToken(fromAddr, rAddr, amountInWei);
-        }
-
         const hash = await swap({
           routerKey: rKey,
           routerAddr: rAddr,
@@ -131,23 +267,46 @@ export default function SwapCard({
           recipient: walletAddress,
           path
         });
-        alert(`Swap Success! Tx: ${hash}`);
+        setTxHash(hash);
+        setTxStatus("success");
       } else {
         if (subMode === "add") {
+          const rAddr = DEFAULT_ROUTER;
+          const amtA = parseEther(fromAmount);
+          const amtB = parseEther(toAmount);
+
           const hash = await addLiquidity({
             tokenAAddr: fromAddr,
             tokenBAddr: toAddr,
-            amountAWei: parseEther(fromAmount),
-            amountBWei: parseEther(toAmount),
+            amountAWei: amtA,
+            amountBWei: amtB,
             recipient: walletAddress
           });
-          alert(`Liquidity Added! Tx: ${hash}`);
+          setTxHash(hash);
+          setTxStatus("success");
+          fetchPositions();
         } else {
-          alert("Please use the 'Active Liquidity' cards to remove specific pairs.");
+          if (!selectedLp) {
+            alert("Please select a liquidity position first.");
+            return;
+          }
+          const rAddr = DEFAULT_ROUTER;
+          const lpToRemove = (selectedLp.lpBalance * BigInt(Math.floor(removePercent))) / 100n;
+          
+          const hash = await removeLiquidity({
+            tokenAAddr: selectedLp.token0,
+            tokenBAddr: selectedLp.token1,
+            lpWei: lpToRemove,
+            recipient: walletAddress
+          });
+          setTxHash(hash);
+          setTxStatus("success");
+          fetchPositions();
         }
       }
     } catch (err: any) {
-      alert(`Error: ${errMsg(err)}`);
+      console.error("Action error:", err);
+      setTxStatus("failed");
     } finally {
       setIsSwapping(false);
     }
@@ -209,6 +368,67 @@ export default function SwapCard({
         </div>
       </header>
 
+      {mode === "pool" && subMode === "remove" ? (
+        <div className="flex flex-col gap-4">
+          <label className="text-xs uppercase font-bold text-brand-text-muted tracking-widest">
+            Select Position to Remove
+          </label>
+          <div className="flex flex-col gap-2 max-h-48 overflow-y-auto no-scrollbar">
+            {lpPositions.length === 0 ? (
+              <div className="p-6 border-2 border-dashed border-white/5 rounded-xl text-center bg-black/20">
+                 <p className="text-[10px] text-brand-text-muted uppercase font-bold tracking-widest">No positions found</p>
+              </div>
+            ) : (
+              lpPositions.map((pos) => {
+                const t0 = coinMap.get(pos.token0);
+                const t1 = coinMap.get(pos.token1);
+                const isSelected = selectedLp?.pairAddress === pos.pairAddress;
+                return (
+                  <button
+                    key={pos.pairAddress}
+                    onClick={() => setSelectedLp(pos)}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-xl border transition-all",
+                      isSelected ? "bg-white/10 border-white/20" : "bg-black/20 border-white/5 hover:bg-white/5"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                       <span className="font-bold text-xs">{t0?.symbol || "???"} / {t1?.symbol || "???"}</span>
+                    </div>
+                    <div className="text-right">
+                       <div className="text-[10px] font-bold text-white">{(Number(pos.share)/100).toFixed(2)}% SHARE</div>
+                       <div className="text-[9px] text-brand-text-muted font-mono">{formatTokenDisplay(formatEther(pos.lpBalance))} LP</div>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+          
+          {selectedLp && (
+            <div className="mt-4 p-4 rounded-xl bg-white/5 border border-white/10 space-y-4">
+               <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-brand-text-muted uppercase">Amount to Remove</span>
+                  <span className="text-lg font-bold">{removePercent}%</span>
+               </div>
+               <input 
+                type="range" 
+                min="1" max="100" 
+                value={removePercent} 
+                onChange={(e) => setRemovePercent(parseInt(e.target.value))}
+                className="w-full accent-white"
+               />
+               <div className="flex justify-between text-[9px] font-bold text-brand-text-muted uppercase tracking-widest">
+                  <button onClick={() => setRemovePercent(25)}>25%</button>
+                  <button onClick={() => setRemovePercent(50)}>50%</button>
+                  <button onClick={() => setRemovePercent(75)}>75%</button>
+                  <button onClick={() => setRemovePercent(100)}>100%</button>
+               </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
       {/* From */}
       <div className="grid grid-cols-1 gap-3 sm:gap-4 items-end">
         <div className="flex flex-col gap-2">
@@ -254,6 +474,8 @@ export default function SwapCard({
             "rounded-full border border-brand-border bg-brand-surface-2 hover:bg-white/10 px-4 py-2 text-xs font-bold uppercase",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
           ].join(" ")}
+          animate={{ rotate: rotation }}
+          transition={{ type: "spring", stiffness: 300, damping: 20 }}
           whileTap={{ scale: 0.96 }}
         >
           {mode === "swap" ? "⇅ Swap" : "⇅"}
@@ -308,10 +530,44 @@ export default function SwapCard({
           </div>
         </div>
       </div>
+      </>
+      )}
+
+      {mode === "pool" && subMode === "add" && (
+        <div className="flex items-center justify-between px-1">
+           <span className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">Pool Share</span>
+           <span className="text-xs font-bold text-white">{poolShare}%</span>
+        </div>
+      )}
+
+          {txStatus && (
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }} 
+          animate={{ opacity: 1, y: 0 }}
+          className={cn(
+            "p-3 rounded-xl border text-[10px] font-bold uppercase tracking-widest text-center",
+            txStatus === "success" 
+              ? "bg-white/5 border-white/10 text-white shadow-[0_0_20px_rgba(255,255,255,0.05)]" 
+              : "bg-white/5 border-red-900/30 text-red-400/80"
+          )}
+        >
+          {txStatus === "success" ? "Transaction Success" : "Transaction Failed"}
+          {txHash && (
+            <a 
+              href={`${litvmChain.blockExplorers.default.url}/tx/${txHash}`}
+              target="_blank"
+              rel="noreferrer"
+              className="block mt-1 underline opacity-50 hover:opacity-100 transition-opacity"
+            >
+              View on Explorer
+            </a>
+          )}
+        </motion.div>
+      )}
 
       <motion.button
         type="button"
-        disabled={!isConnected || isSwapping || parseFloat(fromAmount) <= 0}
+        disabled={!isConnected || isSwapping || isApproving || (mode === "swap" && parseFloat(fromAmount) <= 0)}
         className={[
           "w-full rounded-xl px-4 py-4 text-sm font-bold uppercase tracking-widest transition-all",
           "bg-white text-black hover:opacity-90",
@@ -319,15 +575,23 @@ export default function SwapCard({
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white shadow-[0_0_24px_rgba(255,255,255,0.1)]",
         ].join(" ")}
         whileTap={{ scale: 0.98 }}
-        onClick={handleAction}
+        onClick={() => {
+          if (needsApprovalFrom) handleApprove("from");
+          else if (needsApprovalTo) handleApprove("to");
+          else handleAction();
+        }}
       >
         {!isConnected 
           ? "Connect Wallet" 
-          : isSwapping 
+          : isSwapping || isApproving
             ? "Processing..." 
-            : mode === "pool" 
-              ? (subMode === "add" ? "Add Liquidity" : "Remove Liquidity") 
-              : "Swap Now"}
+            : needsApprovalFrom 
+              ? `Approve ${subMode === "remove" ? "LP" : coinMap.get(fromAddr)?.symbol}` 
+              : needsApprovalTo 
+                ? `Approve ${coinMap.get(toAddr)?.symbol}` 
+                : mode === "pool" 
+                  ? (subMode === "add" ? "Confirm Add Liquidity" : "Confirm Remove Liquidity") 
+                  : "Confirm Swap"}
       </motion.button>
 
       <footer className="flex items-center justify-between text-[9px] text-brand-text-muted font-bold uppercase tracking-[0.2em]">
@@ -339,6 +603,33 @@ export default function SwapCard({
         </div>
         <span>Real-time quotes</span>
       </footer>
+
+      {mode === "pool" && lpPositions.length > 0 && (
+         <div className="mt-8 pt-8 border-t border-white/5">
+            <div className="flex justify-between items-center mb-4">
+             <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mb-4">Select Position</h3>
+               <button onClick={fetchPositions} className="text-[8px] font-bold text-brand-text-muted hover:text-white uppercase tracking-widest">Refresh</button>
+            </div>
+            <div className="space-y-2">
+               {lpPositions.map(pos => {
+                   const t0 = coinMap.get(pos.token0);
+                   const t1 = coinMap.get(pos.token1);
+                   return (
+                       <div key={pos.pairAddress} className="flex justify-between items-center p-3 bg-white/5 border border-white/10 rounded-xl">
+                          <div className="flex items-center gap-2">
+                             <span className="font-bold text-[10px] text-white underline decoration-white/20 underline-offset-4">{t0?.symbol} / {t1?.symbol}</span>
+                          </div>
+                          <div className="text-right">
+                             <div className="text-[9px] font-bold text-white">{(Number(pos.share)/100).toFixed(2)}% SHARE</div>
+                             <div className="text-[8px] text-brand-text-muted">{formatTokenDisplay(formatEther(pos.lpBalance))} LP</div>
+                          </div>
+                       </div>
+                   )
+               })}
+            </div>
+         </div>
+      )}
+
     </motion.section>
   )
 }
@@ -361,7 +652,9 @@ function TokenSelector({
   onSelect: (addr: string) => void
   side: "from" | "to"
 }) {
+  const { address: walletAddress, isConnected } = useAccount();
   const selected = coins.find((c) => c.address === selectedId) ?? coins[0]
+  const [balances, setBalances] = React.useState<Record<string, string>>({});
 
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState("")
@@ -369,6 +662,44 @@ function TokenSelector({
   const buttonRef = React.useRef<HTMLButtonElement | null>(null)
   const listRef = React.useRef<HTMLDivElement | null>(null)
   const inputRef = React.useRef<HTMLInputElement | null>(null)
+  const containerRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+
+    // Fetch balances when popover opens
+    const fetchBalances = async () => {
+      if (!isConnected || !walletAddress) return;
+      const newBalances: Record<string, string> = {};
+      await Promise.all(coins.map(async (coin) => {
+        try {
+          if (isNativeAddr(coin.address)) {
+            const balance = await readProvider.getBalance(walletAddress);
+            newBalances[coin.address] = parseFloat(formatEther(balance)).toLocaleString(undefined, { maximumFractionDigits: 4 });
+          } else {
+            const token = new Contract(coin.address, ERC20_ABI, readProvider);
+            const [bal, dec] = await Promise.all([
+                token.balanceOf(walletAddress),
+                token.decimals()
+            ]);
+            newBalances[coin.address] = (Number(bal) / 10 ** Number(dec)).toLocaleString(undefined, { maximumFractionDigits: 4 });
+          }
+        } catch (e) {
+          newBalances[coin.address] = "0";
+        }
+      }));
+      setBalances(newBalances);
+    };
+    fetchBalances();
+
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [open, coins, isConnected, walletAddress])
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -422,7 +753,7 @@ function TokenSelector({
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         ref={buttonRef}
         type="button"
@@ -463,12 +794,13 @@ function TokenSelector({
             id={`token-popover-${side}`}
             role="listbox"
             aria-label="Select token"
-            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+            initial={{ opacity: 0, y: side === "to" ? -6 : 6, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 6, scale: 0.98 }}
+            exit={{ opacity: 0, y: side === "to" ? -6 : 6, scale: 0.98 }}
             transition={{ duration: 0.16 }}
             className={[
-              "absolute z-[100] mt-2 w-[min(82vw,22rem)] sm:w-[22rem]",
+              "absolute z-[100] w-[min(82vw,22rem)] sm:w-[22rem]",
+              side === "to" ? "bottom-full mb-2" : "mt-2",
               "rounded-xl border border-brand-border bg-brand-surface text-brand-text-primary",
               "shadow-2xl overflow-hidden backdrop-blur-xl",
             ].join(" ")}
@@ -550,6 +882,17 @@ function TokenSelector({
                         </span>
                       </div>
                     </div>
+
+                    {isConnected && (
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-[10px] font-bold text-white">
+                          {balances[c.address] || "0.00"}
+                        </div>
+                        <div className="text-[8px] text-brand-text-muted uppercase tracking-tighter opacity-70">
+                          Balance
+                        </div>
+                      </div>
+                    )}
                   </button>
                 )
               })}

@@ -12,7 +12,6 @@ const navItems = [
   { name: "Deploy", id: "deploy" },
   { name: "Points", id: "points" },
   { name: "NFTs", id: "nfts" },
-  { name: "Check-in", id: "checkin" },
   { name: "Messenger", id: "messenger" },
   { name: "Socials", id: "quests" },
   { name: "Games", id: "games" },
@@ -98,8 +97,6 @@ export function AnimatedNavFramer({ activePage, onPageChange }: { activePage: st
     if (!isExpanded) {
       e.preventDefault();
       setExpanded(true);
-    } else {
-        setMenuOpen(!isMenuOpen)
     }
   };
 
@@ -157,7 +154,7 @@ export function AnimatedNavFramer({ activePage, onPageChange }: { activePage: st
           ))}
         </motion.div>
         
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-x-0 inset-y-0 flex items-center justify-center pointer-events-none">
           <motion.div
             variants={collapsedIconVariants}
             animate={isExpanded ? "expanded" : "collapsed"}

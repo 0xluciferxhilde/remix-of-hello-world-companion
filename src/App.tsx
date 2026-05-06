@@ -31,16 +31,20 @@ import {
   Image as ImageIcon,
   Lock,
   Clock,
-  Eye
+  Eye,
+  Copy,
+  Download,
+  ArrowRight,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAccount, useChainId, useSwitchChain, useBalance } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { formatEther, parseEther } from 'ethers';
+import { formatEther, parseEther, formatUnits, parseUnits } from 'ethers';
 import SwapCard from './components/ui/crypto-swap-card';
 import { AnimatedNavFramer } from './components/ui/navigation-menu';
-import { litvmChain, errMsg } from './lib/litdex-core-logic';
+import { litvmChain, errMsg, LITDEX_DEPLOYER_ADDRESS, readTotalDeployed, deployTokenLitDeX, shortAddr, readDeployments, readDeployFee, readLegacyDeployFee, deployTokenLegacy, getLegacyTokenInfo, getLegacyTokensByCreator, getLegacyTotalDeployedDisplay, readPoints, readCheckinInfo, readCurrentDay, checkinToday } from './lib/litdex-core-logic';
 
 // --- Types ---
 type PageID = 'swap' | 'pool' | 'deploy' | 'points' | 'checkin' | 'nfts' | 'messenger' | 'quests' | 'games' | 'faucet';
@@ -115,7 +119,7 @@ const PoolPage = () => (
     <div className="w-full max-w-[480px] mt-12">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-xl font-bold tracking-tight">Active Liquidity</h2>
+          <h2 className="text-xl font-bold text-white italic">Active Liquidity</h2>
           <p className="text-[10px] text-brand-text-muted uppercase tracking-widest mt-1">Your Positions</p>
         </div>
       </div>
@@ -127,20 +131,20 @@ const PoolPage = () => (
 );
 
 // --- Page: Points ---
-// --- Page: Points ---
-const PointsPage = () => {
+const PointsPage = ({ setPage }: { setPage: (p: PageID) => void }) => {
   const { address, isConnected } = useAccount();
-  const [points, setPoints] = useState<bigint>(0n);
+  const [pointsData, setPointsData] = useState<{ total: bigint; daily: bigint } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState("00:00:00");
+  const [previousPage, setPreviousPage] = useState<PageID>('swap');
 
   useEffect(() => {
     const fetchData = async () => {
       if (!address) return;
       setLoading(true);
       try {
-        const { readPoints } = await import('./lib/litdex-core-logic');
         const p = await readPoints(address);
-        setPoints(p);
+        setPointsData({ total: BigInt(p.total), daily: BigInt(p.daily) });
       } catch (err) {
         console.error(err);
       } finally {
@@ -152,76 +156,298 @@ const PointsPage = () => {
     }
   }, [isConnected, address]);
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      // IST is UTC+5:30. Reset at 00:00 IST = 18:30 UTC.
+      const nextReset = new Date(now);
+      nextReset.setUTCHours(18, 30, 0, 0);
+      if (now.getTime() >= nextReset.getTime()) {
+        nextReset.setUTCDate(nextReset.getUTCDate() + 1);
+      }
+      
+      const diff = nextReset.getTime() - now.getTime();
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      setTimeLeft(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const totalPoints = pointsData ? Number(pointsData.total) : 0;
+  const dailyDeploy = pointsData ? Number(pointsData.daily) : 0;
+  const deployCap = 100;
+  const progress = (dailyDeploy / deployCap) * 100;
+
   return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto py-12 px-4">
-      <div className="flex flex-col md:flex-row items-center justify-between gap-8 mb-12">
-        <div className="text-center md:text-left">
-          <h1 className="text-4xl font-bold mb-2 tracking-tighter">Your Progress</h1>
-          <p className="text-brand-text-muted text-lg">Track your LitDeX points and rewards.</p>
-        </div>
-        <Card className="p-8 bg-brand-surface border-brand-border min-w-[240px] text-center shadow-[0_0_50px_rgba(255,255,255,0.05)] border-white/5">
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-text-muted mb-2">Total Points</div>
-          <div className="text-5xl font-bold tracking-tighter">{points.toString()}</div>
-          <div className="mt-4 pt-4 border-t border-white/5 flex gap-4 justify-center">
-             <div className="text-center">
-               <div className="text-[9px] text-brand-text-muted uppercase">Rank</div>
-               <div className="font-bold">#--</div>
-             </div>
-             <div className="text-center">
-               <div className="text-[9px] text-brand-text-muted uppercase">Multiplier</div>
-               <div className="font-bold">1.0x</div>
-             </div>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-6xl mx-auto py-12 px-6">
+      {/* Header Info */}
+      <div className="flex items-center justify-between mb-10">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-[0_0_15px_rgba(255,255,255,0.05)]">
+            <Trophy size={14} />
           </div>
-        </Card>
+          <div>
+            <h1 className="text-xs font-bold uppercase tracking-[0.3em] text-white">Points Dashboard</h1>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="w-1 h-1 rounded-full bg-white/40 animate-pulse" />
+              <span className="text-[10px] text-brand-text-muted font-medium uppercase tracking-widest">Network Active</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="p-6 bg-brand-surface border-brand-border border-white/5">
-          <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Milestones</h3>
-          <div className="space-y-4">
-            {[100, 500, 1000, 5000].map(m => (
-              <div key={m} className="flex items-center justify-between">
-                <span className="text-brand-text-muted text-sm">{m} Points Reward</span>
-                <span className={cn("text-xs font-bold px-2 py-1 rounded", Number(points) >= m ? "bg-emerald-500/10 text-emerald-500" : "bg-white/5 text-white/20")}>
-                  {Number(points) >= m ? "Unlocked" : "Locked"}
-                </span>
+      {/* Main Dashboard Card */}
+      <Card className="p-10 mb-12 bg-black/60 border-white/10 backdrop-blur-3xl relative overflow-hidden group shadow-[0_0_80px_rgba(0,0,0,0.5)] border-2">
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-white/[0.03] rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-white/[0.02] rounded-full blur-[100px] -ml-40 -mb-40 pointer-events-none" />
+        
+        {/* Scanline Effect */}
+        <div className="absolute inset-0 pointer-events-none opacity-[0.05] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
+        
+        {/* Decorative Grid */}
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-10 relative z-10">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="px-2 py-0.5 bg-white/10 text-white text-[9px] font-bold uppercase tracking-widest rounded border border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.05)]">
+                Accumulated Points
+              </span>
+            </div>
+            <div className="text-8xl font-black text-white tracking-tighter leading-none select-none filter drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">
+              {loading ? (
+                <span className="opacity-10">0000</span>
+              ) : (
+                <motion.span
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ type: "spring", damping: 20 }}
+                >
+                  {totalPoints.toLocaleString()}
+                </motion.span>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full lg:w-auto">
+             <div className="px-6 py-5 bg-white/[0.02] border border-white/5 rounded-2xl group hover:border-white/10 transition-all backdrop-blur-md">
+                <div className="text-[9px] font-bold text-brand-text-muted uppercase tracking-[0.2em] mb-2 flex items-center justify-between">
+                  Daily Quota
+                  <Rocket size={10} className="text-white/40" />
+                </div>
+                <div className="font-bold text-white text-xl tracking-tight">
+                  {dailyDeploy} <span className="text-xs text-white/20 font-medium">/ 100</span>
+                </div>
+             </div>
+             <div className="px-6 py-5 bg-white/[0.02] border border-white/5 rounded-2xl group hover:border-white/10 transition-all backdrop-blur-md">
+                <div className="text-[9px] font-bold text-brand-text-muted uppercase tracking-[0.2em] mb-2 flex items-center justify-between">
+                  Incentive
+                  <CalendarCheck size={10} className="text-white/40" />
+                </div>
+                <div className="font-bold text-white text-xl tracking-tight">
+                  +10 <span className="text-xs text-white/20 font-medium">/ 24h</span>
+                </div>
+             </div>
+          </div>
+        </div>
+
+        {/* Progress System */}
+        <div className="mt-16 space-y-6 relative z-10">
+           <div className="flex justify-between items-end">
+              <div>
+                <div className="text-[10px] font-bold text-white uppercase tracking-[0.3em] mb-1">Network Deployment Quota</div>
+                <div className="text-[9px] text-brand-text-muted uppercase tracking-[0.2em] font-medium">Reset protocol active in {timeLeft}</div>
               </div>
-            ))}
+           </div>
+           <div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden p-0.5 border border-white/5">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                className="h-full rounded-full bg-gradient-to-r from-white/10 via-white/40 to-white/10 relative group-hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] transition-shadow"
+              >
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.4)_50%,transparent_100%)] animate-[shimmer_2s_infinite]" />
+              </motion.div>
+           </div>
+           <div className="flex items-center gap-5">
+             <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-white/40 animate-pulse" />
+                <p className="text-[10px] text-brand-text-muted font-mono uppercase tracking-[0.2em]">
+                  Active: {dailyDeploy}/100 Units
+                </p>
+             </div>
+           </div>
+        </div>
+      </Card>
+
+
+      {/* How to Earn Section */}
+      <div className="space-y-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+             <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white shadow-xl">
+                <Trophy size={24} />
+             </div>
+             <div>
+                <h2 className="text-2xl font-bold text-white tracking-tight italic">Protocol Missions</h2>
+                <p className="text-[10px] text-brand-text-muted uppercase font-bold tracking-[0.3em] mt-1">Complete tasks to increase network yield</p>
+             </div>
           </div>
-        </Card>
-        <Card className="p-6 bg-brand-surface border-brand-border border-white/5">
-          <h3 className="text-sm font-bold uppercase tracking-widest mb-4">User Stats</h3>
-          <div className="space-y-4">
-            <div className="flex justify-between">
-              <span className="text-brand-text-muted text-sm">Status</span>
-              <span className="text-sm font-bold">{isConnected ? "Active" : "Disconnected"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-brand-text-muted text-sm">Experience</span>
-              <span className="text-sm font-bold">Lvl 1</span>
-            </div>
-          </div>
-        </Card>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+           {/* Check-in Card */}
+           <Card 
+            onClick={() => setPage('checkin')}
+            className="p-8 bg-black/40 border-white/5 hover:border-white/20 transition-all group flex flex-col justify-between h-56 cursor-pointer relative overflow-hidden backdrop-blur-xl"
+           >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/[0.02] rounded-full blur-[40px] -mr-16 -mt-16 group-hover:bg-white/5 transition-colors" />
+              
+              <div className="flex gap-6 relative z-10">
+                 <div className="w-16 h-16 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-center text-white shadow-xl group-hover:border-white/30 transition-all">
+                    <CalendarCheck size={28} />
+                 </div>
+                 <div className="pt-2">
+                    <h4 className="text-lg font-bold text-white tracking-tight">Daily Check-in</h4>
+                    <p className="text-[11px] text-brand-text-muted mt-2 leading-relaxed font-medium">Verify your network presence daily to receive a base incentive.</p>
+                 </div>
+              </div>
+              
+              <div className="flex items-center justify-between mt-auto pt-6 border-t border-white/5 relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="px-3 py-1 bg-white/5 rounded-full border border-white/10 text-[10px] font-bold text-white uppercase tracking-widest">
+                    +10 PTS
+                  </div>
+                  <span className="text-[9px] text-brand-text-muted uppercase font-bold tracking-widest">Daily Limit: 1/1</span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] font-bold text-white uppercase tracking-[0.2em] transform translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all">
+                   Initialize <ArrowRight size={14} />
+                </div>
+              </div>
+           </Card>
+
+           {/* Deploy Card */}
+           <Card 
+            onClick={() => setPage('deploy')}
+            className="p-8 bg-black/40 border-white/5 hover:border-white/20 transition-all group flex flex-col justify-between h-56 cursor-pointer relative overflow-hidden backdrop-blur-xl"
+           >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/[0.02] rounded-full blur-[40px] -mr-16 -mt-16 group-hover:bg-white/5 transition-colors" />
+              
+              <div className="flex gap-6 relative z-10">
+                 <div className="w-16 h-16 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-center text-white shadow-xl group-hover:border-white/30 transition-all">
+                    <Rocket size={28} />
+                 </div>
+                 <div className="pt-2">
+                    <h4 className="text-lg font-bold text-white tracking-tight">Contract Deployment</h4>
+                    <p className="text-[11px] text-brand-text-muted mt-2 leading-relaxed font-medium">Execute heavy network operations by launching tokens or factories.</p>
+                 </div>
+              </div>
+              
+              <div className="flex items-center justify-between mt-auto pt-6 border-t border-white/5 relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="px-3 py-1 bg-white/5 rounded-full border border-white/10 text-[10px] font-bold text-white uppercase tracking-widest">
+                    +5 PTS
+                  </div>
+                  <span className="text-[9px] text-brand-text-muted uppercase font-bold tracking-widest">Daily Limit: 100 PTS</span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] font-bold text-white uppercase tracking-[0.2em] transform translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all">
+                   Command <ArrowRight size={14} />
+                </div>
+              </div>
+           </Card>
+
+           {/* Social Quest Card */}
+           <Card 
+            onClick={() => setPage('quests')}
+            className="p-8 bg-black/40 border-white/5 hover:border-white/20 transition-all group flex flex-col justify-between h-56 cursor-pointer relative overflow-hidden backdrop-blur-xl"
+           >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/[0.02] rounded-full blur-[40px] -mr-16 -mt-16 group-hover:bg-white/5 transition-colors" />
+              
+              <div className="flex gap-6 relative z-10">
+                 <div className="w-16 h-16 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-center text-white shadow-xl group-hover:border-white/30 transition-all">
+                    <Sparkles size={28} />
+                 </div>
+                 <div className="pt-2">
+                    <h4 className="text-lg font-bold text-white tracking-tight">Social Expansion</h4>
+                    <p className="text-[11px] text-brand-text-muted mt-2 leading-relaxed font-medium">Propagate protocol awareness through community engagement.</p>
+                 </div>
+              </div>
+              
+              <div className="flex items-center justify-between mt-auto pt-6 border-t border-white/5 relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="px-3 py-1 bg-white/5 rounded-full border border-white/10 text-[10px] font-bold text-white uppercase tracking-widest">
+                    VAR PTS
+                  </div>
+                  <span className="text-[9px] text-brand-text-muted uppercase font-bold tracking-widest">Quest Based</span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] font-bold text-white uppercase tracking-[0.2em] transform translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all">
+                   Engage <ArrowRight size={14} />
+                </div>
+              </div>
+           </Card>
+
+           {/* On-chain Msg Card */}
+           <Card 
+            onClick={() => setPage('messenger')}
+            className="p-8 bg-black/40 border-white/5 hover:border-white/20 transition-all group flex flex-col justify-between h-56 cursor-pointer relative overflow-hidden backdrop-blur-xl"
+           >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/[0.02] rounded-full blur-[40px] -mr-16 -mt-16 group-hover:bg-white/5 transition-colors" />
+              
+              <div className="flex gap-6 relative z-10">
+                 <div className="w-16 h-16 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-center text-white shadow-xl group-hover:border-white/30 transition-all">
+                    <MessageSquare size={28} />
+                 </div>
+                 <div className="pt-2">
+                    <h4 className="text-lg font-bold text-white tracking-tight">On-chain Communication</h4>
+                    <p className="text-[11px] text-brand-text-muted mt-2 leading-relaxed font-medium">Transmit peer-to-peer data directly within the protocol.</p>
+                 </div>
+              </div>
+              
+              <div className="flex items-center justify-between mt-auto pt-6 border-t border-white/5 relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="px-3 py-1 bg-white/5 rounded-full border border-white/10 text-[10px] font-bold text-white uppercase tracking-widest">
+                    +2 PTS
+                  </div>
+                  <span className="text-[9px] text-brand-text-muted uppercase font-bold tracking-widest">Daily Limit: 20 PTS</span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] font-bold text-white uppercase tracking-[0.2em] transform translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all">
+                   Transmit <ArrowRight size={14} />
+                </div>
+              </div>
+           </Card>
+        </div>
       </div>
     </motion.div>
   );
 };
 
 // --- Page: Check-in ---
-// --- Page: Check-in ---
 const CheckinPage = () => {
   const { address, isConnected } = useAccount();
   const [info, setInfo] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [currentDay, setCurrentDay] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [successMsg, setSuccessMsg] = useState<{ ldex: string, pts: number, zkLTC?: string, hash?: string } | null>(null);
+  const [checkinError, setCheckinError] = useState<string | null>(null);
 
   const fetchData = async () => {
     if (!address) return;
     setLoading(true);
     try {
-      const { readCheckinInfo } = await import('./lib/litdex-core-logic');
-      const data = await readCheckinInfo(address);
-      setInfo(data);
+      const [i, d] = await Promise.all([
+        readCheckinInfo(address),
+        readCurrentDay()
+      ]);
+      setInfo({
+        streak: Number(i.streak),
+        lastDay: Number(i.lastDay),
+        totalCheckins: Number(i.totalCheckins),
+        nextLDEX: i.nextLDEX
+      });
+      setCurrentDay(Number(d));
     } catch (err) {
       console.error(err);
     } finally {
@@ -236,63 +462,288 @@ const CheckinPage = () => {
   }, [isConnected, address]);
 
   const handleCheckin = async () => {
-    if (!address) return;
+    if (!address || checkingIn) return;
     setCheckingIn(true);
+    setSuccessMsg(null);
+    setCheckinError(null);
     try {
-      const { checkinToday } = await import('./lib/litdex-core-logic');
-      await checkinToday();
-      alert("Check-in successful!");
-      fetchData();
+      const hash = await checkinToday();
+      alert("Txn check-in successful check txn hash");
+      const newInfo = await readCheckinInfo(address);
+      
+      const ldexVal = formatEther(newInfo.nextLDEX);
+      
+      let zkLTCBonus = "";
+      const now = new Date();
+      // IST is UTC+5.5. So 18:30 UTC is 00:00 IST.
+      // JS Date getUTCDay() for 18:30+ UTC might be different.
+      // Let's use IST day.
+      const istDate = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+      if (istDate.getUTCDay() === 0) { // Sunday
+        const dayOfMonth = istDate.getUTCDate();
+        const week = Math.ceil(dayOfMonth / 7);
+        if (week === 1) zkLTCBonus = "0.001";
+        else if (week === 2) zkLTCBonus = "0.05";
+        else if (week === 3) zkLTCBonus = "0.01";
+        else if (week === 4) zkLTCBonus = "0.1";
+      }
+
+      setSuccessMsg({ 
+        ldex: ldexVal, 
+        pts: 10,
+        zkLTC: zkLTCBonus || undefined,
+        hash
+      });
+      
+      setInfo({
+        streak: Number(newInfo.streak),
+        lastDay: Number(newInfo.lastDay),
+        totalCheckins: Number(newInfo.totalCheckins),
+        nextLDEX: newInfo.nextLDEX
+      });
     } catch (err: any) {
-      alert(`Check-in failed: ${err.message || err.toString()}`);
+      console.error(err);
+      const msg = err.message || err.toString() || "";
+      if (msg.toLowerCase().includes("rejected") || msg.toLowerCase().includes("user denied")) {
+        setCheckinError("User Rejected");
+      } else {
+        setCheckinError(errMsg(err));
+      }
     } finally {
       setCheckingIn(false);
     }
   };
 
-  return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto py-12 px-4 text-center">
-      <div className="mb-12">
-        <h1 className="text-4xl font-bold mb-2 tracking-tighter text-white">Daily Forge</h1>
-        <p className="text-brand-text-muted text-lg">Maintain your streak and earn bonus points.</p>
-      </div>
+  const isTodayChecked = info && info.lastDay === currentDay;
+  const streak = info ? info.streak : 0;
+  
+  // Calculate Sunday bonus info for display
+  let nextSundayBonus = "";
+  const now = new Date();
+  const istDate = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+  if (istDate.getUTCDay() === 0) { // It is Sunday
+    const dayOfMonth = istDate.getUTCDate();
+    const week = Math.ceil(dayOfMonth / 7);
+    if (week === 1) nextSundayBonus = "0.001 zkLTC";
+    else if (week === 2) nextSundayBonus = "0.05 zkLTC";
+    else if (week === 3) nextSundayBonus = "0.01 zkLTC";
+    else if (week === 4) nextSundayBonus = "0.1 zkLTC";
+  }
 
-      <Card className="p-8 md:p-12 bg-brand-surface border-brand-border border-white/5 bg-black/20 shadow-2xl">
-        <div className="flex justify-center gap-2 mb-8">
-          {[1,2,3,4,5,6,7].map(day => (
-            <div 
-              key={day} 
-              className={cn(
-                "w-10 h-14 rounded-lg border flex flex-col items-center justify-center transition-all",
-                info && info.streak >= day 
-                  ? "bg-white border-white text-black scale-110 shadow-[0_0_20px_rgba(255,255,255,0.3)]" 
-                  : "bg-white/5 border-white/10 text-white/30"
+  // Calendar logic
+  const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const todayIST = istDate.getUTCDay(); // 0 is Sunday, 1 is Monday
+  const todayIdx = todayIST === 0 ? 6 : todayIST - 1; 
+
+  const calendar = weekDays.map((name, idx) => {
+    const isToday = idx === todayIdx;
+    const isPast = idx < todayIdx;
+    
+    let status: 'checked' | 'missed' | 'pending' | 'future' = 'future';
+    
+    if (isToday) {
+      status = isTodayChecked ? 'checked' : 'pending';
+    } else if (isPast) {
+      const daysAgo = todayIdx - idx;
+      if (isTodayChecked) {
+        status = daysAgo < streak ? 'checked' : 'missed';
+      } else {
+        // Today not checked, so streak was broken if daysAgo > streak
+        status = daysAgo <= streak && streak > 0 ? 'checked' : 'missed';
+      }
+    }
+
+    return { name, isToday, status };
+  });
+
+  return (
+    <div className="max-w-xl mx-auto py-4 px-6">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-center mb-6"
+      >
+        <h1 className="text-3xl font-black text-white tracking-tighter mb-2 italic uppercase leading-none">Daily Forge</h1>
+        <div className="flex items-center justify-center gap-2">
+          <div className="h-px w-4 bg-white/20" />
+          <p className="text-white/40 font-bold tracking-[0.3em] uppercase text-[7px]">Protocol Authentication & Yield Mission</p>
+          <div className="h-px w-4 bg-white/20" />
+        </div>
+      </motion.div>
+
+      <div className="relative max-w-xl mx-auto">
+        {/* Next Reward Badge */}
+        {!isTodayChecked && info && (
+          <div className="absolute lg:-right-6 lg:top-0 lg:translate-x-full -top-20 right-0 z-20 w-44">
+            <div className="px-5 py-4 bg-white/[0.02] border border-white/10 rounded-2xl flex flex-col items-start backdrop-blur-xl shadow-2xl">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shadow-[0_0_8px_white]" />
+                <span className="text-[8px] font-black text-white/60 uppercase tracking-[0.3em]">Next Reward</span>
+              </div>
+              <div className="text-2xl font-black text-white tracking-tighter leading-none">
+                {Number(formatEther(info.nextLDEX)).toFixed(0)} <span className="text-[10px] text-white/70 font-bold uppercase ml-1.5 tracking-tighter">LDEX</span>
+              </div>
+              {nextSundayBonus && (
+                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/5 w-full">
+                  <Sparkles size={10} className="text-white/20" />
+                  <span className="text-[7px] font-bold text-white/40 uppercase tracking-[0.1em]">Sunday Multiplier Active</span>
+                </div>
               )}
-            >
-              <span className="text-[8px] font-bold uppercase tracking-tighter">Day</span>
-              <span className="text-lg font-bold">{day}</span>
+            </div>
+          </div>
+        )}
+
+        <Card className="bg-black/60 border-white/10 p-5 relative overflow-hidden backdrop-blur-3xl shadow-[0_0_80px_rgba(0,0,0,0.5)] border-2">
+
+        {/* Scanline Effect */}
+        <div className="absolute inset-0 pointer-events-none opacity-[0.02] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
+
+        {/* Calendar Grid */}
+        <div className="grid grid-cols-7 gap-1.5 mb-6 relative z-10">
+          {calendar.map((day, i) => (
+            <div key={i} className="space-y-1.5">
+              <div className="text-[7px] font-black text-white/20 uppercase tracking-[0.1em] text-center">{day.name}</div>
+              <motion.div
+                animate={day.isToday && day.status === 'pending' ? {
+                  borderColor: ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.5)', 'rgba(255,255,255,0.1)'],
+                } : {}}
+                transition={{ duration: 2, repeat: Infinity }}
+                className={cn(
+                  "aspect-[4/5] rounded-md border flex flex-col items-center justify-center relative transition-all duration-500",
+                  day.status === 'checked' && "bg-white/10 border-white/40 text-white shadow-[0_0_15px_rgba(255,255,255,0.05)]",
+                  day.status === 'missed' && "bg-white/[0.02] border-white/5 text-white/10",
+                  day.status === 'pending' && "bg-white/[0.05] border-white/20 text-white/50",
+                  day.status === 'future' && "bg-white/[0.01] border-white/5 text-white/5"
+                )}
+              >
+                {day.status === 'checked' ? (
+                  <ListChecks size={14} className="filter drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]" />
+                ) : day.status === 'missed' ? (
+                  <X size={12} className="opacity-20" />
+                ) : (
+                  <span className="text-[8px] font-mono opacity-20">{i + 1}</span>
+                )}
+                
+                {day.isToday && (
+                  <div className="absolute -top-0.5 -right-0.5">
+                    <div className="w-1.5 h-1.5 bg-white rounded-full shadow-[0_0_8px_white] animate-pulse" />
+                  </div>
+                )}
+              </motion.div>
             </div>
           ))}
         </div>
 
-        <div className="mb-8">
-           <div className="text-5xl font-black mb-1">{info ? info.streak : 0}</div>
-           <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-brand-text-muted">Day Streak</div>
+        <div className="flex flex-col items-center gap-5 relative z-10">
+          <div className="text-center">
+            <AnimatePresence>
+              {checkinError && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mb-2"
+                >
+                  <p className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em] animate-pulse">
+                    {checkinError}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <div className="text-5xl font-black text-white tracking-tighter leading-none select-none filter drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">
+              {loading ? "..." : streak}
+            </div>
+            <div className="text-[8px] font-bold text-white/20 uppercase tracking-[0.4em] mt-1 ml-1">Day Streak Active</div>
+          </div>
+
+          <motion.button
+            whileHover={!isTodayChecked && !checkingIn ? { scale: 1.02, backgroundColor: 'rgba(255,255,255,1)' } : {}}
+            whileTap={!isTodayChecked && !checkingIn ? { scale: 0.98 } : {}}
+            disabled={isTodayChecked || checkingIn || !isConnected}
+            onClick={handleCheckin}
+            className={cn(
+              "w-full max-w-xs py-3 rounded-lg font-black text-[10px] uppercase tracking-[0.25em] transition-all duration-300 flex items-center justify-center gap-2 border-2",
+              isTodayChecked 
+                ? "bg-white/5 border-white/10 text-white/20 cursor-default" 
+                : "bg-white/90 text-black border-white shadow-[0_10px_30px_rgba(0,0,0,0.4)]"
+            )}
+          >
+            {checkingIn ? (
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 border-1.5 border-black/20 border-t-black rounded-full animate-spin" />
+                Auth...
+              </div>
+            ) : isTodayChecked ? (
+              <>Confirmed <ListChecks size={12} /></>
+            ) : (
+              <>Confirm Check-in <ArrowRight size={12} /></>
+            )}
+          </motion.button>
         </div>
 
-        <button 
-          onClick={handleCheckin}
-          disabled={!isConnected || checkingIn || (info && (Date.now() / 1000 < Number(info.lastCheckin) + 86400))}
-          className="w-full py-4 bg-white text-black rounded-xl font-bold text-lg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_40px_rgba(255,255,255,0.1)] disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {checkingIn ? "Processing..." : (info && (Date.now() / 1000 < Number(info.lastCheckin) + 86400)) ? "Checked In Today" : "Check-in Now"}
-        </button>
-
-        <p className="mt-6 text-xs text-brand-text-muted">You get +10 points everyday, and +50 points bonus on Day 7.</p>
+        {/* Footer info inside the card */}
+        <div className="mt-6 pt-4 border-t border-white/5 grid grid-cols-1 sm:grid-cols-2 gap-4 opacity-40">
+           <div className="flex items-start gap-2">
+              <div className="w-6 h-6 rounded-md bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                <Trophy size={12} />
+              </div>
+              <p className="text-[7px] uppercase font-bold tracking-widest leading-tight">
+                Yield Mission: +10 Pts (Fixed) & scaling LDEX yield per streak day.
+              </p>
+           </div>
+           <div className="flex items-start gap-2">
+              <div className="w-6 h-6 rounded-md bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                <Sparkles size={12} />
+              </div>
+              <p className="text-[7px] uppercase font-bold tracking-widest leading-tight">
+                Elite Bonus: Guaranteed Sunday zkLTC. Points are separate from daily cap.
+              </p>
+           </div>
+        </div>
       </Card>
-    </motion.div>
+      </div>
+
+      {/* Floating Success Notification */}
+      <AnimatePresence>
+        {successMsg && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="fixed bottom-10 right-10 z-50 bg-white text-black p-8 rounded-3xl shadow-[0_30px_100px_rgba(255,255,255,0.2)] max-w-sm border-4 border-black/5"
+          >
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-black/5 flex items-center justify-center">
+                <Trophy size={24} />
+              </div>
+              <div>
+                <div className="font-black uppercase tracking-tighter text-lg">Mission Success</div>
+                <div className="text-[9px] font-bold uppercase tracking-widest opacity-40">Protocol Verification Complete</div>
+              </div>
+            </div>
+            <div className="space-y-3 pt-4 border-t border-black/5">
+              <div className="flex justify-between items-center text-xs font-bold">
+                <span className="opacity-40 uppercase tracking-widest">Base Points</span>
+                <span>+{successMsg.pts} PTS</span>
+              </div>
+              <div className="flex justify-between items-center text-xs font-bold">
+                <span className="opacity-40 uppercase tracking-widest">Incentive Yield</span>
+                <span>+{Number(successMsg.ldex).toLocaleString()} LDEX</span>
+              </div>
+              {successMsg.zkLTC && (
+                <div className="flex justify-between items-center text-xs font-bold text-emerald-600">
+                  <span className="opacity-40 uppercase tracking-widest">Sunday Bonus</span>
+                  <span>+{successMsg.zkLTC} zkLTC 🎁</span>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
+
 
 // --- Page: NFTs ---
 const NFTsPage = () => {
@@ -385,6 +836,7 @@ const DeployPage = () => {
   const [selectedType, setSelectedType] = useState('erc20');
   const [history, setHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [totalDeployed, setTotalDeployed] = useState<number | null>(null);
 
   const types = [
     { id: 'erc20', name: 'ERC20 Token', icon: Coins },
@@ -394,11 +846,19 @@ const DeployPage = () => {
     { id: 'factory', name: 'Token Factory', icon: Hammer },
   ];
 
+  const fetchData = async () => {
+    try {
+      const count = await readTotalDeployed();
+      setTotalDeployed(count);
+    } catch (err) {
+      console.error("Failed to read total deployed", err);
+    }
+  };
+
   const fetchHistory = async () => {
     if (!address) return;
     setLoadingHistory(true);
     try {
-      const { readDeployments } = await import('./lib/litdex-core-logic');
       const data = await readDeployments(address);
       setHistory(data);
     } catch (err) {
@@ -409,6 +869,7 @@ const DeployPage = () => {
   };
 
   useEffect(() => {
+    fetchData();
     if (isConnected && address) {
       fetchHistory();
     }
@@ -416,7 +877,7 @@ const DeployPage = () => {
 
   const renderDeployForm = () => {
     switch (selectedType) {
-      case 'erc20': return <ERC20Form onDeployed={fetchHistory} />;
+      case 'erc20': return <ERC20Form onDeployed={() => { fetchHistory(); fetchData(); }} />;
       case 'nft': return <NFTForm onDeployed={fetchHistory} />;
       case 'staking': return <StakingForm onDeployed={fetchHistory} />;
       case 'vesting': return <VestingForm onDeployed={fetchHistory} />;
@@ -427,6 +888,31 @@ const DeployPage = () => {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-4xl mx-auto py-12 px-4">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12">
+        <Card className="p-6 bg-white/[0.03] border-white/10 backdrop-blur-xl">
+          <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-[0.2em] mb-2">Total Deployed</p>
+          <h3 className="text-4xl font-black text-white italic tracking-tighter">
+            {totalDeployed ?? "..."}
+          </h3>
+        </Card>
+        <Card className="p-6 bg-white/[0.03] border-white/10 backdrop-blur-xl">
+          <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-[0.2em] mb-2">Deployer</p>
+          <div className="flex items-center justify-between">
+            <h3 className="font-mono text-xs text-white opacity-80">{shortAddr(LITDEX_DEPLOYER_ADDRESS)}</h3>
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(LITDEX_DEPLOYER_ADDRESS);
+                alert("Copied!");
+              }}
+              className="p-1.5 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10"
+            >
+              <Layers size={14} className="text-white/60" />
+            </button>
+          </div>
+        </Card>
+      </div>
+
       {/* Sub-navigation */}
       <div className="flex flex-wrap justify-center gap-2 mb-12">
         {types.map((t) => (
@@ -446,32 +932,29 @@ const DeployPage = () => {
         ))}
       </div>
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={selectedType}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.2 }}
-        >
-          {renderDeployForm()}
-        </motion.div>
-      </AnimatePresence>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={selectedType}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="pb-24"
+          >
+            {renderDeployForm()}
+          </motion.div>
+        </AnimatePresence>
 
-      {/* Deployments History Card */}
-      <Card className="mt-12 p-8 bg-black/40 border-white/5 backdrop-blur-xl">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-             <div className="p-2 bg-white/10 rounded-lg text-white">
-                <Layers size={18} />
-             </div>
-             <div>
-                <h3 className="font-bold text-white">My Deployed Contracts</h3>
-                <p className="text-[10px] text-brand-text-muted uppercase tracking-widest font-bold">Manage your projects</p>
-             </div>
-          </div>
-          <button onClick={fetchHistory} className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all">Refresh</button>
-        </div>
+            <Card className="p-8 bg-black/40 border-white/5 backdrop-blur-3xl shadow-2xl">
+              <div className="flex items-center gap-3 mb-6">
+                 <div className="p-2 bg-white/10 rounded-lg text-white">
+                    <Layers size={18} />
+                 </div>
+                 <div>
+                    <h3 className="font-bold text-white italic">Deployed Contracts</h3>
+                    <p className="text-[10px] text-brand-text-muted uppercase tracking-widest font-bold">Manage your projects</p>
+                 </div>
+              </div>
         
         {isConnected ? (
           history.length === 0 ? (
@@ -483,10 +966,10 @@ const DeployPage = () => {
               {history.map((h, i) => (
                 <div key={i} className="p-4 bg-white/5 border border-white/10 rounded-xl flex items-center justify-between">
                    <div>
-                     <p className="text-xs font-bold text-white uppercase">{h.type}</p>
-                     <p className="text-[10px] text-brand-text-muted font-mono">{h.addr.slice(0, 10)}...{h.addr.slice(-8)}</p>
+                     <p className="text-xs font-bold text-white uppercase">{h.label || "Contract"}</p>
+                     <p className="text-[10px] text-brand-text-muted font-mono">{shortAddr(h.contractAddress)}</p>
                    </div>
-                   <a href={`https://explorer.zkltc.com/address/${h.addr}`} target="_blank" rel="noreferrer" className="p-2 hover:bg-white/10 rounded-lg transition-all">
+                   <a href={`${litvmChain.blockExplorers.default.url}/address/${h.contractAddress}`} target="_blank" rel="noreferrer" className="p-2 hover:bg-white/10 rounded-lg transition-all">
                      <ExternalLink size={14} className="text-brand-text-muted" />
                    </a>
                 </div>
@@ -505,7 +988,7 @@ const DeployPage = () => {
 
 // --- Sub-Form Components ---
 
-const FormContainer = ({ title, subtitle, icon: Icon, children, deployFee = "0.05", actionLabel = "Deploy", onAction = () => {}, loading = false }: any) => (
+const FormContainer = ({ title, subtitle, icon: Icon, children, deployFee = "0.05", actionLabel = "Deploy", onAction = () => {}, loading = false, onPreviewSource }: any) => (
   <Card className="p-8 bg-black/40 border-white/5 backdrop-blur-3xl shadow-2xl overflow-hidden relative group">
     <div className="absolute top-0 right-0 w-64 h-64 bg-white/[0.02] rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
     <div className="flex items-start gap-5 mb-10">
@@ -521,15 +1004,23 @@ const FormContainer = ({ title, subtitle, icon: Icon, children, deployFee = "0.0
       {children}
     </div>
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-12">
-       <button className="flex items-center justify-center gap-2 py-4 bg-white/5 border border-white/10 rounded-xl font-bold text-sm hover:bg-white/10 transition-all uppercase tracking-widest">
-         <Eye size={16} /> Preview Source
-       </button>
+       {onPreviewSource && (
+         <button 
+          onClick={onPreviewSource}
+          className="flex items-center justify-center gap-2 py-4 bg-white/5 border border-white/10 rounded-xl font-bold text-sm hover:bg-white/10 transition-all uppercase tracking-widest"
+         >
+           <Eye size={16} /> Preview Source
+         </button>
+       )}
        <button 
         onClick={onAction}
         disabled={loading}
-        className="flex items-center justify-center gap-2 py-4 bg-white text-black rounded-xl font-bold text-sm hover:opacity-90 transition-all uppercase tracking-widest shadow-[0_0_30px_rgba(255,255,255,0.1)] disabled:opacity-50"
+        className={cn(
+          "flex items-center justify-center gap-2 py-4 bg-white text-black rounded-xl font-bold text-sm hover:opacity-90 transition-all uppercase tracking-widest shadow-[0_0_30px_rgba(255,255,255,0.1)] disabled:opacity-50",
+          !onPreviewSource && "md:col-span-2"
+        )}
        >
-         <Rocket size={16} /> {loading ? "Deploying..." : `${actionLabel} (${deployFee} zkLTC)`}
+         <Rocket size={16} /> {loading ? "Deploying..." : actionLabel.includes('(') ? actionLabel : `${actionLabel || "Deploy"} (${deployFee} zkLTC)`}
        </button>
     </div>
   </Card>
@@ -570,76 +1061,904 @@ const ToggleField = ({ label, desc, active, onToggle }: any) => (
 );
 
 const ERC20Form = ({ onDeployed }: any) => {
+  const { address } = useAccount();
+  const [step, setStep] = useState<'basics' | 'features' | 'review'>('basics');
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
   const [supply, setSupply] = useState('1000000');
+  const [decimals, setDecimals] = useState('18');
+  const [mintable, setMintable] = useState(true);
+  const [burnable, setBurnable] = useState(true);
+  const [pausable, setPausable] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [txStatus, setTxStatus] = useState<"success" | "failed" | null>(null);
 
   const handleDeploy = async () => {
-    if(!name || !symbol || !supply) return alert("Fill all fields");
+    if (!name || !symbol || !supply) return alert("Fill all fields");
+    if (!address) return alert("Connect wallet first");
+
     setLoading(true);
+    setTxStatus(null);
+    setTxHash(null);
     try {
-      const { deployERC20 } = await import('./lib/litdex-core-logic');
-      const hash = await deployERC20(name, symbol, supply);
-      alert(`Success! Token deployed: ${hash}`);
+      const result = await deployTokenLitDeX({
+        name,
+        symbol,
+        totalSupply: supply
+      });
+
+      setTxHash(result.txHash);
+      setTxStatus("success");
+
+      // Points API Integration
+      try {
+        await fetch("https://api.test-hub.xyz/quest/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            wallet: address,
+            questId: "deploy_" + result.txHash.slice(0, 10).toLowerCase()
+          })
+        });
+      } catch (e) {
+        console.warn("Points API failed", e);
+      }
+
       onDeployed?.();
     } catch (err) {
-      alert(errMsg(err));
+      console.error("Deploy error:", err);
+      setTxStatus("failed");
     } finally {
       setLoading(false);
     }
   };
 
+  const renderStep = () => {
+    switch (step) {
+      case 'basics':
+        return (
+          <div className="space-y-6">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-white mb-1">Token Basics</h2>
+              <p className="text-sm text-brand-text-muted">Define the core parameters of your token.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <InputField 
+                label="Token Name" 
+                placeholder="My Awesome Token" 
+                helper="Max 50 characters — appears in wallets"
+                value={name} 
+                onChange={setName} 
+              />
+              <InputField 
+                label="Token Symbol" 
+                placeholder="MAT" 
+                helper="e.g. MAT — appears on DEXes"
+                value={symbol} 
+                onChange={setSymbol} 
+              />
+              <InputField 
+                label="Total Supply" 
+                placeholder="1000000" 
+                helper="1,000,000 tokens"
+                value={supply} 
+                onChange={setSupply} 
+              />
+              <InputField 
+                label="Decimals" 
+                placeholder="18" 
+                helper="18 decimals is standard for most tokens"
+                value={decimals} 
+                onChange={setDecimals} 
+              />
+            </div>
+            <div className="flex justify-end pt-4">
+              <button 
+                onClick={() => setStep('features')}
+                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+              >
+                Next <ArrowLeftRight size={14} className="rotate-180" />
+              </button>
+            </div>
+          </div>
+        );
+      case 'features':
+        return (
+          <div className="space-y-6">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-white mb-1">Token Features</h2>
+              <p className="text-sm text-brand-text-muted">Configure optional capabilities for your token.</p>
+            </div>
+            <div className="space-y-4">
+              <ToggleField 
+                label="Mintable" 
+                desc="Owner can create additional tokens after launch" 
+                active={mintable}
+                onToggle={() => setMintable(!mintable)}
+              />
+              <ToggleField 
+                label="Burnable" 
+                desc="Token holders can permanently destroy their tokens" 
+                active={burnable}
+                onToggle={() => setBurnable(!burnable)}
+              />
+              <ToggleField 
+                label="Pausable" 
+                desc="Owner can pause all token transfers in an emergency" 
+                active={pausable}
+                onToggle={() => setPausable(!pausable)}
+              />
+            </div>
+            <div className="flex justify-between pt-4">
+              <button 
+                onClick={() => setStep('basics')}
+                className="flex items-center gap-2 px-8 py-4 bg-white/5 border border-white/10 rounded-xl text-brand-text-muted font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+              >
+                <ArrowLeftRight size={14} /> Back
+              </button>
+              <button 
+                onClick={() => setStep('review')}
+                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+              >
+                Next <ArrowLeftRight size={14} className="rotate-180" />
+              </button>
+            </div>
+          </div>
+        );
+      case 'review':
+        return (
+          <div className="space-y-6">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-white mb-1">Review & Deploy</h2>
+              <p className="text-sm text-brand-text-muted">Confirm your token configuration before deploying.</p>
+            </div>
+            
+            <div className="bg-white/[0.03] border border-white/5 rounded-2xl overflow-hidden text-sm">
+              <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                <span className="text-brand-text-muted font-bold uppercase text-[10px] tracking-widest">Token Name</span>
+                <span className="text-white font-bold">{name || "Unnamed"}</span>
+              </div>
+              <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                <span className="text-brand-text-muted font-bold uppercase text-[10px] tracking-widest">Symbol</span>
+                <span className="text-white font-bold">{symbol || "NONE"}</span>
+              </div>
+              <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                <span className="text-brand-text-muted font-bold uppercase text-[10px] tracking-widest">Total Supply</span>
+                <span className="text-white font-bold">{supply ? parseInt(supply).toLocaleString() : "0"}</span>
+              </div>
+              <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                <span className="text-brand-text-muted font-bold uppercase text-[10px] tracking-widest">Decimals</span>
+                <span className="text-white font-bold">{decimals}</span>
+              </div>
+              <div className="p-4 flex justify-between items-center">
+                <span className="text-brand-text-muted font-bold uppercase text-[10px] tracking-widest">Features</span>
+                <div className="flex gap-2">
+                  {mintable && <span className="text-[8px] font-bold px-2 py-0.5 bg-white/10 text-white rounded uppercase">Mintable</span>}
+                  {burnable && <span className="text-[8px] font-bold px-2 py-0.5 bg-brand-teal/10 text-brand-teal rounded uppercase">Burnable</span>}
+                  {pausable && <span className="text-[8px] font-bold px-2 py-0.5 bg-white/10 text-white rounded uppercase">Pausable</span>}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-6 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-white/40 uppercase tracking-widest">Points Reward</p>
+                <h4 className="text-2xl font-black text-white mt-1">+5 points</h4>
+              </div>
+              <Coins className="text-white opacity-20" size={32} />
+            </div>
+
+            {txStatus && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }} 
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                  "p-4 rounded-2xl border text-[10px] font-bold uppercase tracking-widest text-center",
+                  txStatus === "success" 
+                    ? "bg-white/5 border-white/10 text-white shadow-[0_0_20px_rgba(255,255,255,0.05)]" 
+                    : "bg-white/5 border-red-900/30 text-red-400/80"
+                )}
+              >
+                {txStatus === "success" ? "Token Deployed Successfully" : "Deployment Failed"}
+                {txHash && (
+                  <a 
+                    href={`${litvmChain.blockExplorers.default.url}/tx/${txHash}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block mt-1 underline opacity-50 hover:opacity-100 transition-opacity"
+                  >
+                    View Transaction on Explorer
+                  </a>
+                )}
+              </motion.div>
+            )}
+
+            <button 
+              onClick={handleDeploy}
+              disabled={loading}
+              className="w-full py-5 bg-white text-black rounded-2xl font-bold text-base hover:bg-white/90 transition-all shadow-[0_0_40px_rgba(255,255,255,0.1)] flex items-center justify-center gap-3 disabled:opacity-50"
+            >
+              <Rocket size={20} /> {loading ? "Deploying..." : "Deploy Token"}
+            </button>
+
+            <div className="text-center space-y-2">
+              <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">0.05 zkLTC fee per deploy</p>
+              <div className="flex items-center justify-center gap-2 text-white/50">
+                <Sparkles size={12} />
+                <span className="text-[9px] font-bold uppercase tracking-widest">+5 points earned automatically (10/100 today)</span>
+              </div>
+              <p className="text-[9px] text-brand-text-muted italic opacity-60">
+                Deploys via LitDeXDeployer • points credited automatically by relayer.
+              </p>
+            </div>
+
+            <div className="flex justify-start">
+              <button 
+                onClick={() => setStep('features')}
+                className="flex items-center gap-2 px-8 py-4 bg-white/5 border border-white/10 rounded-xl text-brand-text-muted font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+              >
+                <ArrowLeftRight size={14} /> Back
+              </button>
+            </div>
+          </div>
+        );
+    }
+  };
+
   return (
-    <FormContainer title="ERC20 Token" subtitle="// Standard fungible token." icon={Coins} onAction={handleDeploy} loading={loading}>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <InputField label="Token Name" placeholder="e.g. PepeCoin" value={name} onChange={setName} />
-        <InputField label="Token Symbol" placeholder="e.g. PEPE" value={symbol} onChange={setSymbol} />
-        <InputField label="Total Supply" placeholder="1000000" value={supply} onChange={setSupply} />
-      </div>
-    </FormContainer>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <Card className="lg:col-span-2 p-8 bg-black/40 border-white/5 backdrop-blur-3xl shadow-2xl relative overflow-hidden min-h-[600px] flex flex-col">
+        {/* Progress Header */}
+        <div className="flex items-center gap-4 mb-12">
+          {[
+            { id: 'basics', label: 'Token Basics', step: 1 },
+            { id: 'features', label: 'Features', step: 2 },
+            { id: 'review', label: 'Review & Deploy', step: 3 }
+          ].map((s, i) => (
+            <React.Fragment key={s.id}>
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all border",
+                  step === s.id 
+                    ? "bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.3)]" 
+                    : i < ['basics', 'features', 'review'].indexOf(step)
+                      ? "bg-brand-surface-2 border-white/20 text-white"
+                      : "bg-white/5 border-white/10 text-brand-text-muted"
+                )}>
+                  {i < ['basics', 'features', 'review'].indexOf(step) ? <ListChecks size={14} /> : s.step}
+                </div>
+                <span className={cn(
+                  "text-[10px] font-bold uppercase tracking-widest transition-colors",
+                  step === s.id ? "text-white" : "text-brand-text-muted"
+                )}>{s.label}</span>
+              </div>
+              {i < 2 && <div className="w-12 h-[1px] bg-white/10" />}
+            </React.Fragment>
+          ))}
+        </div>
+
+        <div className="flex-1">
+          {renderStep()}
+        </div>
+      </Card>
+
+      {/* Live Preview Sidebar */}
+      <Card className="p-8 bg-black/40 border-white/5 backdrop-blur-3xl shadow-2xl h-fit sticky top-24">
+        <div className="flex items-center gap-2 mb-8">
+          <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+          <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50">Live Preview</span>
+        </div>
+
+        <div className="flex flex-col items-center">
+          <div className="w-28 h-28 rounded-full bg-brand-teal/20 border-2 border-brand-teal/30 flex items-center justify-center text-brand-teal shadow-[0_0_40px_rgba(79,209,197,0.15)] mb-6 group relative overflow-hidden">
+             <div className="absolute inset-0 bg-brand-teal animate-pulse opacity-10" />
+             <span className="text-4xl font-black italic select-none">
+               {symbol ? symbol[0].toUpperCase() : "?"}
+             </span>
+          </div>
+          
+          <h3 className="text-2xl font-black text-white italic tracking-tighter mb-1 select-none">
+            {name || "Token Name"}
+          </h3>
+          <p className="text-xs font-bold text-brand-teal uppercase tracking-[0.3em] select-none">
+            {symbol || "SYMBOL"}
+          </p>
+
+          <div className="w-full h-[1px] bg-white/5 my-8" />
+
+          <div className="w-full space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">Total Supply</span>
+              <span className="text-xs font-mono text-white select-none">
+                {supply ? parseInt(supply).toLocaleString() : "0"}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">Decimals</span>
+              <span className="text-xs font-mono text-white select-none">{decimals}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">Standard</span>
+              <span className="text-xs font-mono text-white select-none">ERC-20</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mt-8 w-full">
+            <span className={cn("text-[8px] font-bold px-2 py-1 rounded border transition-all uppercase tracking-widest", mintable ? "bg-white/10 border-white/20 text-white" : "bg-white/5 border-white/5 text-white/10")}>Mintable</span>
+            <span className={cn("text-[8px] font-bold px-2 py-1 rounded border transition-all uppercase tracking-widest", burnable ? "bg-brand-teal/10 border-brand-teal/20 text-brand-teal" : "bg-white/5 border-white/5 text-white/10")}>Burnable</span>
+            <span className={cn("text-[8px] font-bold px-2 py-1 rounded border transition-all uppercase tracking-widest", pausable ? "bg-white/10 border-white/20 text-white" : "bg-white/5 border-white/5 text-white/10")}>Pausable</span>
+          </div>
+
+          <div className="mt-12 w-full p-4 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-3">
+             <div className="w-2 h-2 rounded-full bg-white/40" />
+             <span className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">Deploying to <span className="text-white">LitVM Testnet</span></span>
+          </div>
+        </div>
+      </Card>
+    </div>
   );
 };
 
 const NFTForm = ({ onDeployed }: any) => {
+  const { address } = useAccount();
+  const [step, setStep] = useState<'basics' | 'features' | 'review'>('basics');
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
+  const [maxSupply, setMaxSupply] = useState('10000');
+  const [mintPrice, setMintPrice] = useState('0.05');
+  const [maxPerWallet, setMaxPerWallet] = useState('5');
+  const [baseURI, setBaseURI] = useState('https://api.example.xyz/meta/');
   const [loading, setLoading] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [txStatus, setTxStatus] = useState<"success" | "failed" | null>(null);
+  const [showSource, setShowSource] = useState(false);
+
+  const generateSource = () => {
+    return `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+/**
+ * ================================================================
+ *  ${name || "Unnamed"} (${symbol || "NFT"}) | Max: ${maxSupply || "0"} | Price: ${mintPrice || "0"} zkLTC
+ *  LitVM LiteForge  |  Chain 4441  |  https://api.republicstats.xyz/litvm/rpc
+ * ================================================================
+ */
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+
+contract MNFT is ERC721, Ownable {
+    using Strings for uint256;
+
+    uint256 public constant MAX_SUPPLY = ${maxSupply || "0"};
+    uint256 public mintPrice = ${parseFloat(mintPrice || "0")} ether;
+    uint256 public maxPerWallet = ${maxPerWallet || "0"};
+    uint256 private _total;
+    bool public saleActive;
+    mapping(address => uint256) public minted;
+    string private _base;
+
+    constructor() ERC721("${name || "Unnamed"}", "${symbol || "NFT"}") Ownable(msg.sender) {
+        _base = "${baseURI || "https://api.example.xyz/meta/"}";
+    }
+
+    function mint(uint256 qty) external payable {
+        require(saleActive, "Sale off");
+        require(_total + qty <= MAX_SUPPLY, "Exceeds supply");
+        require(minted[msg.sender] + qty <= maxPerWallet, "Wallet limit");
+        require(msg.value >= mintPrice * qty, "Not enough zkLTC");
+        minted[msg.sender] += qty;
+        for (uint256 i = 0; i < qty; i++) { 
+          _total++; 
+          _safeMint(msg.sender, _total); 
+        }
+    }
+
+    function ownerMint(address to, uint256 qty) external onlyOwner {
+        require(_total + qty <= MAX_SUPPLY, "Exceeds supply");
+        for (uint256 i = 0; i < qty; i++) { 
+          _total++; 
+          _safeMint(to, _total); 
+        }
+    }
+
+    function totalSupply() public view returns (uint256) { return _total; }
+    function setSaleActive(bool val) external onlyOwner { saleActive = val; }
+    function setMintPrice(uint256 p) external onlyOwner { mintPrice = p; }
+    function setBaseURI(string calldata uri_) external onlyOwner { _base = uri_; }
+
+    function tokenURI(uint256 id) public view override returns (string memory) {
+        require(_ownerOf(id) != address(0), "Nonexistent");
+        return string(abi.encodePacked(_base, id.toString(), ".json"));
+    }
+
+    function withdraw() external onlyOwner {
+        (bool ok,) = owner().call{value: address(this).balance}("");
+        require(ok, "Withdraw fail");
+    }
+}`;
+  };
 
   const handleDeploy = async () => {
+    if (!name || !symbol || !maxSupply) return alert("Fill all fields");
+    if (!address) return alert("Connect wallet first");
+
     setLoading(true);
+    setTxStatus(null);
+    setTxHash(null);
     try {
-      const { deployNFT } = await import('./lib/litdex-core-logic');
-      const hash = await deployNFT(name, symbol);
-      alert(`NFT Deployed: ${hash}`);
+      const { deployNFTLitDeX } = await import('./lib/litdex-core-logic');
+      const result = await deployNFTLitDeX({
+        name,
+        symbol,
+        maxSupply: parseInt(maxSupply),
+        mintPrice: parseEther(mintPrice),
+        baseURI
+      });
+
+      setTxHash(result.txHash);
+      setTxStatus("success");
       onDeployed?.();
     } catch (err) {
-      alert(errMsg(err));
+      console.error("Deploy error:", err);
+      setTxStatus("failed");
     } finally {
       setLoading(false);
     }
   };
 
+  const renderStep = () => {
+    switch (step) {
+      case 'basics':
+        return (
+          <div className="space-y-6 text-left">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-white mb-1">Collection Basics</h2>
+              <p className="text-sm text-brand-text-muted">Define the identity of your NFT collection.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <InputField 
+                label="Collection Name" 
+                placeholder="e.g. LitVM Punks" 
+                helper="Max 32 characters"
+                value={name} 
+                onChange={setName} 
+              />
+              <InputField 
+                label="Symbol" 
+                placeholder="e.g. LVRP" 
+                helper="Short identifier (3-5 chars)"
+                value={symbol} 
+                onChange={setSymbol} 
+              />
+              <InputField 
+                label="Max Supply" 
+                placeholder="10000" 
+                helper="Maximum NFTs that can ever exist"
+                value={maxSupply} 
+                onChange={setMaxSupply} 
+              />
+              <InputField 
+                label="Mint Price (zkLTC)" 
+                placeholder="0.05" 
+                helper="Price per NFT mint"
+                value={mintPrice} 
+                onChange={setMintPrice} 
+              />
+            </div>
+            <div className="flex justify-end pt-4">
+              <button 
+                onClick={() => setStep('features')}
+                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+              >
+                Next <ArrowLeftRight size={14} className="rotate-180" />
+              </button>
+            </div>
+          </div>
+        );
+      case 'features':
+        return (
+          <div className="space-y-6 text-left">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-white mb-1">Advanced Settings</h2>
+              <p className="text-sm text-brand-text-muted">Configure metadata and minting limits.</p>
+            </div>
+            <div className="space-y-6">
+              <InputField 
+                label="Base URI" 
+                placeholder="https://api.example.xyz/meta/" 
+                helper="Metadata folder — token URls become {baseURI}{tokenId}.json"
+                value={baseURI} 
+                onChange={setBaseURI} 
+              />
+              <InputField 
+                label="Max Per Wallet" 
+                placeholder="5" 
+                helper="Anti-whale limit per address"
+                value={maxPerWallet} 
+                onChange={setMaxPerWallet} 
+              />
+            </div>
+            <div className="flex justify-between pt-4">
+              <button 
+                onClick={() => setStep('basics')}
+                className="flex items-center gap-2 px-8 py-4 bg-white/5 border border-white/10 rounded-xl text-brand-text-muted font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+              >
+                <ArrowLeftRight size={14} /> Back
+              </button>
+              <button 
+                onClick={() => setStep('review')}
+                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+              >
+                Next <ArrowLeftRight size={14} className="rotate-180" />
+              </button>
+            </div>
+          </div>
+        );
+      case 'review':
+        return (
+          <div className="space-y-6 text-left">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-white mb-1">Review & Deploy</h2>
+              <p className="text-sm text-brand-text-muted">Confirm your NFT configuration before deploying.</p>
+            </div>
+            
+            <div className="bg-white/[0.03] border border-white/5 rounded-2xl overflow-hidden text-sm">
+              <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                <span className="text-brand-text-muted font-bold uppercase text-[10px] tracking-widest">Collection</span>
+                <span className="text-white font-bold">{name || "Unnamed"}</span>
+              </div>
+              <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                <span className="text-brand-text-muted font-bold uppercase text-[10px] tracking-widest">Symbol</span>
+                <span className="text-white font-bold">{symbol || "NONE"}</span>
+              </div>
+              <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                <span className="text-brand-text-muted font-bold uppercase text-[10px] tracking-widest">Max Supply</span>
+                <span className="text-white font-bold">{maxSupply ? parseInt(maxSupply).toLocaleString() : "0"}</span>
+              </div>
+              <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                <span className="text-brand-text-muted font-bold uppercase text-[10px] tracking-widest">Mint Price</span>
+                <span className="text-white font-bold">{mintPrice} zkLTC</span>
+              </div>
+              <div className="p-4 flex justify-between items-center">
+                <span className="text-brand-text-muted font-bold uppercase text-[10px] tracking-widest">Features</span>
+                <div className="flex gap-2">
+                  <span className="text-[8px] font-bold px-2 py-0.5 bg-white/10 text-white rounded uppercase">Mintable</span>
+                  <span className="text-[8px] font-bold px-2 py-0.5 bg-brand-teal/10 text-brand-teal rounded uppercase">Burnable</span>
+                </div>
+              </div>
+            </div>
+
+            {txStatus && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }} 
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                  "p-4 rounded-2xl border text-[10px] font-bold uppercase tracking-widest text-center",
+                  txStatus === "success" 
+                    ? "bg-white/5 border-white/10 text-white shadow-[0_0_20px_rgba(255,255,255,0.05)]" 
+                    : "bg-white/5 border-white/5 text-red-500/60"
+                )}
+              >
+                {txStatus === "success" ? "NFT Collection Deployed" : "Process Interrupted"}
+                {txHash && (
+                  <a 
+                    href={`${litvmChain.blockExplorers.default.url}/tx/${txHash}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block mt-1 underline opacity-50 hover:opacity-100 transition-opacity"
+                  >
+                    View Transaction on Explorer
+                  </a>
+                )}
+              </motion.div>
+            )}
+
+            <button 
+              onClick={handleDeploy}
+              disabled={loading}
+              className="w-full py-5 bg-white text-black rounded-2xl font-bold text-base hover:bg-white/90 transition-all shadow-[0_0_40px_rgba(255,255,255,0.1)] flex items-center justify-center gap-3 disabled:opacity-50"
+            >
+              <Rocket size={20} /> {loading ? "Deploying..." : "Deploy Collection"}
+            </button>
+
+            <div className="flex justify-start">
+              <button 
+                onClick={() => setStep('features')}
+                className="flex items-center gap-2 px-8 py-4 bg-white/5 border border-white/10 rounded-xl text-brand-text-muted font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+              >
+                <ArrowLeftRight size={14} /> Back
+              </button>
+            </div>
+          </div>
+        );
+    }
+  };
+
   return (
-    <FormContainer title="NFT (ERC721)" subtitle="// Collectible digital assets." icon={ImageIcon} onAction={handleDeploy} loading={loading}>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <InputField label="Collection Name" placeholder="e.g. Bored Lizards" value={name} onChange={setName} />
-        <InputField label="Symbol" placeholder="e.g. BLIZ" value={symbol} onChange={setSymbol} />
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <Card className="lg:col-span-2 p-8 bg-black/40 border-white/5 backdrop-blur-3xl shadow-2xl relative overflow-hidden min-h-[600px] flex flex-col">
+          {/* Progress Header */}
+          <div className="flex items-center gap-4 mb-12">
+            {[
+              { id: 'basics', label: 'Basics', step: 1 },
+              { id: 'features', label: 'Advanced', step: 2 },
+              { id: 'review', label: 'Review', step: 3 }
+            ].map((s, i) => (
+              <React.Fragment key={s.id}>
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all border",
+                    step === s.id 
+                      ? "bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.3)]" 
+                      : i < ['basics', 'features', 'review'].indexOf(step)
+                        ? "bg-brand-surface-2 border-white/20 text-white"
+                        : "bg-white/5 border-white/10 text-brand-text-muted"
+                  )}>
+                    {i < ['basics', 'features', 'review'].indexOf(step) ? <ListChecks size={14} /> : s.step}
+                  </div>
+                  <span className={cn(
+                    "text-[10px] font-bold uppercase tracking-widest transition-colors",
+                    step === s.id ? "text-white" : "text-brand-text-muted"
+                  )}>{s.label}</span>
+                </div>
+                {i < 2 && <div className="w-12 h-[1px] bg-white/10" />}
+              </React.Fragment>
+            ))}
+          </div>
+
+          <div className="flex-1">
+            {renderStep()}
+          </div>
+
+          <div className="mt-8 pt-8 border-t border-white/5 flex gap-4">
+             <button 
+               onClick={() => setShowSource(!showSource)}
+               className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-brand-text-muted font-bold hover:bg-white/10 transition-all uppercase text-[10px] tracking-widest"
+             >
+               <Eye size={14} /> {showSource ? "Hide Source" : "Preview Source"}
+             </button>
+          </div>
+        </Card>
+
+        {/* Live Preview Sidebar */}
+        <Card className="p-8 bg-black/40 border-white/5 backdrop-blur-3xl shadow-2xl h-fit sticky top-24">
+          <div className="flex items-center gap-2 mb-8">
+            <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50">Live Preview</span>
+          </div>
+
+          <div className="flex flex-col items-center">
+            <div className="w-28 h-28 rounded-full bg-brand-teal/20 border-2 border-brand-teal/30 flex items-center justify-center text-brand-teal shadow-[0_0_40px_rgba(79,209,197,0.15)] mb-6 group relative overflow-hidden">
+              <div className="absolute inset-0 bg-brand-teal animate-pulse opacity-10" />
+              <span className="text-4xl font-black italic select-none">
+                {symbol ? symbol[0].toUpperCase() : "?"}
+              </span>
+            </div>
+            
+            <h3 className="text-2xl font-black text-white italic tracking-tighter mb-1 select-none text-center">
+              {name || "Collection Name"}
+            </h3>
+            <p className="text-xs font-bold text-brand-teal uppercase tracking-[0.3em] select-none">
+              {symbol || "SYMBOL"}
+            </p>
+
+            <div className="w-full h-[1px] bg-white/5 my-8" />
+
+            <div className="w-full space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">Max Supply</span>
+                <span className="text-xs font-mono text-white select-none">
+                  {maxSupply ? parseInt(maxSupply).toLocaleString() : "0"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">Mint Price</span>
+                <span className="text-xs font-mono text-white select-none">{mintPrice} zkLTC</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">Standard</span>
+                <span className="text-xs font-mono text-white select-none">ERC-721</span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 mt-8 w-full">
+              <span className="text-[8px] font-bold px-2 py-1 rounded border bg-white/10 border-white/20 text-white uppercase tracking-widest">Mintable</span>
+              <span className="text-[8px] font-bold px-2 py-1 rounded border bg-brand-teal/10 border-brand-teal/20 text-brand-teal uppercase tracking-widest">Burnable</span>
+            </div>
+
+            <div className="mt-12 w-full p-4 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-white/40" />
+              <span className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">Deploying to <span className="text-white">LitVM Testnet</span></span>
+            </div>
+          </div>
+        </Card>
       </div>
-    </FormContainer>
+
+      <AnimatePresence>
+        {showSource && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <Card className="p-6 bg-black border-white/5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                   <span className="text-[10px] font-bold text-white uppercase tracking-widest">MNFT.sol</span>
+                   <span className="text-[10px] px-2 py-0.5 bg-white/5 text-brand-text-muted rounded flex items-center gap-1 uppercase font-bold tracking-widest">
+                     <Sparkles size={10} /> Source preview
+                   </span>
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(generateSource());
+                      alert("Source copied!");
+                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white transition-all uppercase tracking-widest"
+                  >
+                    <Copy size={12} /> Copy
+                  </button>
+                  <button className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white transition-all uppercase tracking-widest">
+                    <Download size={12} /> Download
+                  </button>
+                </div>
+              </div>
+              <div className="relative">
+                <pre className="p-6 bg-white/[0.02] border border-white/5 rounded-xl text-[11px] font-mono whitespace-pre text-white/70 overflow-x-auto leading-relaxed max-h-[500px]">
+                  <code>{generateSource()}</code>
+                </pre>
+                <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+              </div>
+              <div className="mt-4 flex items-center gap-2 text-[9px] text-brand-text-muted italic opacity-60">
+                 <Info size={10} />
+                 <span>Reference source — your actual deployment uses the audited on-chain factory at {shortAddr(LITDEX_DEPLOYER_ADDRESS)}.</span>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 
 const StakingForm = ({ onDeployed }: any) => {
+  const [stakingToken, setStakingToken] = useState('');
   const [rewardToken, setRewardToken] = useState('');
+  const [rewardRate, setRewardRate] = useState('12');
+  const [lockPeriod, setLockPeriod] = useState('30');
+  const [label, setLabel] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fee, setFee] = useState<string>('0.05');
+  const [txInfo, setTxInfo] = useState<{ hash: string; address?: string } | null>(null);
+  const [showSource, setShowSource] = useState(false);
+
+  useEffect(() => {
+    readDeployFee().then(f => setFee(formatEther(f))).catch(console.warn);
+  }, []);
+
+  const generateSource = () => {
+    const bps = Math.floor(parseFloat(rewardRate || "0") * 100);
+    return `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+/**
+ * ================================================================
+ *  ${label || "ldex"} | APR: ${rewardRate || "0"}% | Lock: ${lockPeriod || "0"} days
+ *  LitVM LiteForge  |  Chain 4441  |  https://api.republicstats.xyz/litvm/rpc
+ * ================================================================
+ */
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+
+contract ldex is Ownable, ReentrancyGuard, Pausable {
+    using SafeERC20 for IERC20;
+
+    IERC20 public immutable STAKE_TOKEN;
+    IERC20 public immutable REWARD_TOKEN;
+    uint256 public constant LOCK = ${lockPeriod || "0"} days;
+    uint256 public constant MIN  = 1 ether;
+    uint256 public rewardBps     = ${bps};
+
+    struct Info { uint256 amount; uint256 start; uint256 lastClaim; uint256 pending; }
+    mapping(address => Info) public stakes;
+    uint256 public totalStaked;
+
+    event Staked(address indexed u, uint256 amt);
+    event Unstaked(address indexed u, uint256 amt);
+    event Claimed(address indexed u, uint256 amt);
+
+    constructor(address _stake, address _reward) Ownable(msg.sender) {
+        STAKE_TOKEN  = IERC20(_stake);
+        REWARD_TOKEN = IERC20(_reward);
+    }
+
+    function pending(address u) public view returns (uint256) {
+        Info memory s = stakes[u];
+        if (s.amount == 0) return s.pending;
+        uint256 e = block.timestamp - s.lastClaim;
+        return s.pending + (s.amount * rewardBps * e) / (10000 * 365 days);
+    }
+
+    function stake(uint256 amt) external nonReentrant whenNotPaused {
+        require(amt >= MIN, "Below min");
+        Info storage s = stakes[msg.sender];
+        if (s.amount > 0) s.pending = pending(msg.sender);
+        STAKE_TOKEN.safeTransferFrom(msg.sender, address(this), amt);
+        s.amount += amt;
+        s.start = s.start == 0 ? block.timestamp : s.start;
+        s.lastClaim = block.timestamp;
+        totalStaked += amt;
+        emit Staked(msg.sender, amt);
+    }
+
+    function claim() external nonReentrant whenNotPaused {
+        Info storage s = stakes[msg.sender];
+        uint256 r = pending(msg.sender);
+        require(r > 0, "No rewards");
+        s.pending = 0;
+        s.lastClaim = block.timestamp;
+        REWARD_TOKEN.safeTransfer(msg.sender, r);
+        emit Claimed(msg.sender, r);
+    }
+
+    function unstake(uint256 amt) external nonReentrant {
+        Info storage s = stakes[msg.sender];
+        require(s.amount >= amt, "Insufficient");
+        require(block.timestamp >= s.start + LOCK, "Locked");
+        s.pending = pending(msg.sender);
+        s.amount -= amt;
+        s.lastClaim = block.timestamp;
+        totalStaked -= amt;
+        STAKE_TOKEN.safeTransfer(msg.sender, amt);
+        emit Unstaked(msg.sender, amt);
+    }
+
+    function emergencyWithdraw() external nonReentrant {
+        Info storage s = stakes[msg.sender];
+        require(s.amount > 0, "Nothing");
+        uint256 a = s.amount;
+        s.amount = 0;
+        s.pending = 0;
+        totalStaked -= a;
+        STAKE_TOKEN.safeTransfer(msg.sender, a);
+    }
+
+    function setRate(uint256 bps) external onlyOwner { rewardBps = bps; }
+    function depositRewards(uint256 amt) external onlyOwner {
+        REWARD_TOKEN.safeTransferFrom(msg.sender, address(this), amt);
+    }
+    function pause() external onlyOwner { _pause(); }
+    function unpause() external onlyOwner { _unpause(); }
+}`;
+  };
 
   const handleDeploy = async () => {
+    if (!stakingToken) return alert("Staking token required");
     setLoading(true);
+    setTxInfo(null);
     try {
       const { deployStaking } = await import('./lib/litdex-core-logic');
-      const hash = await deployStaking(rewardToken);
-      alert(`Staking Contract Deployed: ${hash}`);
+      const dailyRateWei = parseEther((parseFloat(rewardRate) / 365).toString());
+      
+      const res = await deployStaking(
+        stakingToken,
+        rewardToken || stakingToken,
+        dailyRateWei,
+        BigInt(lockPeriod),
+        label || "Staking Pool"
+      );
+      setTxInfo({ hash: res.txHash, address: res.contractAddress });
       onDeployed?.();
     } catch (err) {
       alert(errMsg(err));
@@ -649,22 +1968,222 @@ const StakingForm = ({ onDeployed }: any) => {
   };
 
   return (
-    <FormContainer title="Staking" subtitle="// Reward users for holding." icon={Lock} onAction={handleDeploy} loading={loading}>
-      <InputField label="Reward Token Address" placeholder="0x..." value={rewardToken} onChange={setRewardToken} />
-    </FormContainer>
+    <div className="space-y-6">
+      <FormContainer 
+        title="Staking" 
+        subtitle="// Single-asset staking pool with daily reward rate and lock period." 
+        icon={Lock} 
+        onAction={handleDeploy} 
+        loading={loading}
+        deployFee={fee}
+        actionLabel="Deploy"
+        onPreviewSource={() => setShowSource(!showSource)}
+      >
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <InputField 
+              label="Staking Token Address *" 
+              placeholder="0x... ERC20 to stake" 
+              value={stakingToken} 
+              onChange={setStakingToken} 
+            />
+            <InputField 
+              label="Reward Token Address" 
+              placeholder="0x... (blank = same as stake)" 
+              helper="Leave blank to use same token as reward"
+              value={rewardToken} 
+              onChange={setRewardToken} 
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <InputField 
+              label="Annual Reward Rate (%)" 
+              placeholder="12" 
+              helper="Converted to per-day rate x 1e18 on-chain"
+              value={rewardRate} 
+              onChange={setRewardRate} 
+            />
+            <InputField 
+              label="Lock Period (days)" 
+              placeholder="30" 
+              helper="Minimum staking duration"
+              value={lockPeriod} 
+              onChange={setLockPeriod} 
+            />
+          </div>
+          <InputField 
+            label="Pool Label" 
+            placeholder="e.g. PEPE Staking Pool" 
+            helper="Stored on-chain as the contract's display name"
+            value={label} 
+            onChange={setLabel} 
+          />
+        </div>
+
+        {txInfo && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 p-4 bg-brand-teal/10 border border-brand-teal/20 rounded-xl text-[10px] font-bold uppercase tracking-widest text-center text-brand-teal"
+          >
+            Pool Deployed Successfully
+            <div className="mt-2 flex flex-col gap-1">
+              {txInfo.address && <div className="text-white opacity-60">Address: {shortAddr(txInfo.address)}</div>}
+              <a 
+                href={`${litvmChain.blockExplorers.default.url}/tx/${txInfo.hash}`}
+                target="_blank"
+                rel="noreferrer"
+                className="underline block mt-1"
+              >
+                View on Explorer
+              </a>
+            </div>
+          </motion.div>
+        )}
+      </FormContainer>
+
+      <AnimatePresence>
+        {showSource && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <Card className="p-6 bg-black border-white/5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                   <span className="text-[10px] font-bold text-white uppercase tracking-widest">Staking.sol</span>
+                   <span className="text-[10px] px-2 py-0.5 bg-white/5 text-brand-text-muted rounded flex items-center gap-1 uppercase font-bold tracking-widest">
+                     <Sparkles size={10} /> Source preview
+                   </span>
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(generateSource());
+                      alert("Source copied!");
+                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white transition-all uppercase tracking-widest"
+                  >
+                    <Copy size={12} /> Copy
+                  </button>
+                </div>
+              </div>
+              <div className="relative">
+                <pre className="p-6 bg-white/[0.02] border border-white/5 rounded-xl text-[11px] font-mono whitespace-pre text-white/70 overflow-x-auto leading-relaxed max-h-[500px]">
+                  <code>{generateSource()}</code>
+                </pre>
+                <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+              </div>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 
 const VestingForm = ({ onDeployed }: any) => {
-  const [token, setToken] = useState('');
+  const [tokenAddress, setTokenAddress] = useState('');
+  const [beneficiary, setBeneficiary] = useState('');
+  const [amount, setAmount] = useState('');
+  const [cliffDays, setCliffDays] = useState('90');
+  const [vestingDays, setVestingDays] = useState('365');
+  const [label, setLabel] = useState('');
+  const [revocable, setRevocable] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [fee, setFee] = useState<string>('0.05');
+  const [txInfo, setTxInfo] = useState<{ hash: string; address?: string } | null>(null);
+  const [showSource, setShowSource] = useState(false);
+
+  useEffect(() => {
+    readDeployFee().then(f => setFee(formatEther(f))).catch(console.warn);
+  }, []);
+
+  const generateSource = () => {
+    return `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+/**
+ * ================================================================
+ *  ${label || "TokenVesting"} | Cliff: ${cliffDays}d | Duration: ${vestingDays}d
+ *  LitVM LiteForge  |  Chain 4441  |  https://api.republicstats.xyz/litvm/rpc
+ * ================================================================
+ */
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+    IERC20 public immutable TOKEN;
+    uint256 public constant CLIFF    = ${cliffDays} days;
+    uint256 public constant DURATION = ${vestingDays} days;
+
+    address public beneficiary;
+    uint256 public totalAmt;
+    uint256 public released;
+    uint256 public start;
+    bool public revoked;
+    event Released(address indexed ben, uint256 amt);
+
+    constructor() Ownable(msg.sender) {
+        TOKEN = IERC20(${tokenAddress || "0x0000000000000000000000000000000000000000"});
+    }
+
+    function setBeneficiary(address addr) external onlyOwner {
+        require(beneficiary == address(0), "Already set");
+        beneficiary = addr;
+        start = block.timestamp;
+    }
+    function setTotal(uint256 amt) external onlyOwner { require(released == 0, "Started"); totalAmt = amt; }
+
+    function vested() public view returns (uint256) {
+        if (start == 0) return 0;
+        if (revoked) return released;
+        if (block.timestamp < start + CLIFF) return 0;
+        uint256 e = block.timestamp - (start + CLIFF);
+        return e >= DURATION ? totalAmt : (totalAmt * e) / DURATION;
+    }
+
+    function release() external nonReentrant {
+        require(msg.sender == beneficiary || msg.sender == owner(), "Unauth");
+        uint256 r = vested() - released;
+        require(r > 0, "Nothing");
+        released += r;
+        TOKEN.safeTransfer(beneficiary, r);
+        emit Released(beneficiary, r);
+    }
+
+    function revoke() external onlyOwner {
+        require(!revoked, "Done");
+        uint256 r = totalAmt - vested();
+        revoked = true;
+        if (r > 0) TOKEN.safeTransfer(owner(), r);
+    }
+}`;
+  };
 
   const handleDeploy = async () => {
+    if (!tokenAddress || !beneficiary || !amount) return alert("Required fields missing");
     setLoading(true);
+    setTxInfo(null);
     try {
       const { deployVesting } = await import('./lib/litdex-core-logic');
-      const hash = await deployVesting(token);
-      alert(`Vesting Contract Deployed: ${hash}`);
+      const res = await deployVesting(
+        tokenAddress,
+        beneficiary,
+        parseEther(amount),
+        BigInt(cliffDays),
+        BigInt(vestingDays),
+        revocable,
+        label || "Token Vesting"
+      );
+      setTxInfo({ hash: res.txHash, address: res.contractAddress });
       onDeployed?.();
     } catch (err) {
       alert(errMsg(err));
@@ -674,22 +2193,269 @@ const VestingForm = ({ onDeployed }: any) => {
   };
 
   return (
-    <FormContainer title="Vesting" subtitle="// Linear release schedules." icon={Clock} onAction={handleDeploy} loading={loading}>
-      <InputField label="Token Address" placeholder="0x..." value={token} onChange={setToken} />
-    </FormContainer>
+    <div className="space-y-6">
+      <FormContainer 
+        title="Vesting" 
+        subtitle="// Cliff + linear vesting for team / investor / advisor allocations." 
+        icon={Clock} 
+        onAction={handleDeploy} 
+        loading={loading}
+        deployFee={fee}
+        actionLabel="Deploy"
+        onPreviewSource={() => setShowSource(!showSource)}
+      >
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <InputField 
+              label="Token Address *" 
+              placeholder="0x... token to vest" 
+              value={tokenAddress} 
+              onChange={setTokenAddress} 
+            />
+            <InputField 
+              label="Vesting Label" 
+              placeholder="e.g. Team Vesting" 
+              value={label} 
+              onChange={setLabel} 
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <InputField 
+              label="Beneficiary Address *" 
+              placeholder="0x..." 
+              value={beneficiary} 
+              onChange={setBeneficiary} 
+            />
+            <InputField 
+              label="Total Amount (whole units) *" 
+              placeholder="e.g. 1000" 
+              helper="Total supply to be vested"
+              value={amount} 
+              onChange={setAmount} 
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <InputField 
+              label="Cliff Period (days)" 
+              placeholder="90" 
+              helper="No tokens released before cliff ends"
+              value={cliffDays} 
+              onChange={setCliffDays} 
+            />
+            <InputField 
+              label="Vesting Duration (days after cliff)" 
+              placeholder="365" 
+              value={vestingDays} 
+              onChange={setVestingDays} 
+            />
+          </div>
+
+          <ToggleField 
+            label="Revocable by owner"
+            desc="Owner can cancel and reclaim unvested tokens"
+            active={revocable}
+            onToggle={setRevocable}
+          />
+        </div>
+
+        {txInfo && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 p-4 bg-brand-teal/10 border border-brand-teal/20 rounded-xl text-[10px] font-bold uppercase tracking-widest text-center text-brand-teal"
+          >
+            Vesting Deployed Successfully
+            <div className="mt-2 flex flex-col gap-1">
+              {txInfo.address && <div className="text-white opacity-60">Address: {shortAddr(txInfo.address)}</div>}
+              <a 
+                href={`${litvmChain.blockExplorers.default.url}/tx/${txInfo.hash}`}
+                target="_blank"
+                rel="noreferrer"
+                className="underline block mt-1"
+              >
+                View on Explorer
+              </a>
+            </div>
+          </motion.div>
+        )}
+      </FormContainer>
+
+      <AnimatePresence>
+        {showSource && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <Card className="p-6 bg-black border-white/5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                   <span className="text-[10px] font-bold text-white uppercase tracking-widest">Vesting.sol</span>
+                   <span className="text-[10px] px-2 py-0.5 bg-white/5 text-brand-text-muted rounded flex items-center gap-1 uppercase font-bold tracking-widest">
+                     <Sparkles size={10} /> Source preview
+                   </span>
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(generateSource());
+                      alert("Source copied!");
+                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white transition-all uppercase tracking-widest"
+                  >
+                    <Copy size={12} /> Copy
+                  </button>
+                </div>
+              </div>
+              <div className="relative">
+                <pre className="p-6 bg-white/[0.02] border border-white/5 rounded-xl text-[11px] font-mono whitespace-pre text-white/70 overflow-x-auto leading-relaxed max-h-[500px]">
+                  <code>{generateSource()}</code>
+                </pre>
+                <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+              </div>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 
 const TokenFactoryForm = ({ onDeployed }: any) => {
+  const { address } = useAccount();
+  const [name, setName] = useState('');
+  const [symbol, setSymbol] = useState('');
+  const [decimals, setDecimals] = useState('18');
+  const [supply, setSupply] = useState('');
+  const [mintable, setMintable] = useState(true);
+  const [burnable, setBurnable] = useState(true);
+  const [pausable, setPausable] = useState(true);
+  
   const [loading, setLoading] = useState(false);
+  const [fee, setFee] = useState<string>('0.05');
+  const [txInfo, setTxInfo] = useState<{ hash: string; address?: string } | null>(null);
+  const [showSource, setShowSource] = useState(false);
+  
+  const [deployedTokens, setDeployedTokens] = useState<any[]>([]);
+  const [totalDeployed, setTotalDeployed] = useState<number>(596);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  const fetchHistory = async () => {
+    if (!address) return;
+    setLoadingHistory(true);
+    try {
+      const tokens = await getLegacyTokensByCreator(address);
+      const details = await Promise.all(tokens.map(t => getLegacyTokenInfo(t)));
+      // Tuple: contractAddress, creator, name, symbol, totalSupply, decimals, mintable, burnable, pausable, deployedAt
+      setDeployedTokens(details.map(d => ({
+        address: d[0],
+        name: d[2],
+        symbol: d[3],
+        supply: d[4],
+        decimals: d[5],
+        mintable: d[6],
+        burnable: d[7],
+        pausable: d[8]
+      })));
+      setTotalDeployed(await getLegacyTotalDeployedDisplay());
+    } catch (err) {
+      console.warn("Failed to fetch history:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    readLegacyDeployFee().then(f => setFee(formatEther(f))).catch(console.warn);
+    fetchHistory();
+  }, [address]);
+
+  const generateSource = () => {
+    return `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+// ================================================================
+//  LitVMTokenFactory | Fee: ${fee} zkLTC per token deploy
+//  LitVM LiteForge  |  Chain 4441  |  https://api.republicstats.xyz/litvm/rpc
+// ================================================================
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract FactoryToken is ERC20, Ownable {
+    uint8 private _d;
+    bool public mintable;
+    bool public burnable;
+    bool public pausable;
+    bool private _paused;
+
+    constructor(string memory n, string memory s, uint8 d, uint256 supply, bool m, bool b, bool p, address creator) ERC20(n, s) Ownable(creator) {
+        _d = d;
+        mintable = m;
+        burnable = b;
+        pausable = p;
+        _mint(creator, supply);
+    }
+
+    function decimals() public view override returns (uint8) { return _d; }
+    function mint(address to, uint256 amt) external onlyOwner { require(mintable, "Disabled"); _mint(to, amt); }
+    function burn(uint256 amt) external { require(burnable, "Disabled"); _burn(msg.sender, amt); }
+    function pause() external onlyOwner { require(pausable, "Disabled"); _paused = true; }
+    function unpause() external onlyOwner { require(pausable, "Disabled"); _paused = false; }
+    function _update(address from, address to, uint256 v) internal override { require(!_paused, "Paused"); super._update(from, to, v); }
+}
+
+contract LitVMTokenFactory is Ownable {
+    uint256 public fee = ${fee} ether;
+    address[] public all;
+    mapping(address => address[]) public byCreator;
+    event Deployed(address indexed token, address indexed creator, string name, string symbol);
+
+    constructor() Ownable(msg.sender) {}
+
+    function deploy(string calldata name, string calldata symbol, uint8 decimals, uint256 supply, bool mintable, bool burnable, bool pausable) external payable returns (address) {
+        require(msg.value >= fee, "Fee low");
+        require(bytes(name).length > 0 && bytes(symbol).length > 0, "Name required");
+        require(supply > 0, "Supply > 0");
+        (bool ok,) = owner().call{value: msg.value}("");
+        require(ok, "Fee transfer fail");
+        FactoryToken t = new FactoryToken(name, symbol, decimals, supply, mintable, burnable, pausable, msg.sender);
+        address a = address(t);
+        all.push(a);
+        byCreator[msg.sender].push(a);
+        emit Deployed(a, msg.sender, name, symbol);
+        return a;
+    }
+
+    function setFee(uint256 f_) external onlyOwner { fee = f_; }
+    function getAll() external view returns (address[] memory) { return all; }
+    function getByCreator(address c) external view returns (address[] memory) { return byCreator[c]; }
+    function withdraw() external onlyOwner {
+        (bool ok,) = owner().call{value: address(this).balance}("");
+        require(ok, "Withdraw fail");
+    }
+    receive() external payable {}
+}`;
+  };
 
   const handleDeploy = async () => {
+    if (!name || !symbol || !supply) return alert("Required fields missing");
     setLoading(true);
+    setTxInfo(null);
     try {
-      const { deployFactory } = await import('./lib/litdex-core-logic');
-      const hash = await deployFactory();
-      alert(`Factory Deployed: ${hash}`);
+      const { deployTokenLegacy } = await import('./lib/litdex-core-logic');
+      const res = await deployTokenLegacy({
+        name,
+        symbol,
+        decimals: parseInt(decimals),
+        totalSupply: parseUnits(supply, parseInt(decimals)),
+        mintable,
+        burnable,
+        pausable
+      });
+      setTxInfo({ hash: res.txHash, address: res.tokenAddress });
       onDeployed?.();
+      fetchHistory();
     } catch (err) {
       alert(errMsg(err));
     } finally {
@@ -698,9 +2464,119 @@ const TokenFactoryForm = ({ onDeployed }: any) => {
   };
 
   return (
-    <FormContainer title="Token Factory" subtitle="// Manage multiple launches." icon={Hammer} onAction={handleDeploy} loading={loading}>
-      <p className="text-sm text-brand-text-muted">Deploy a master factory to manage all your future ERC20 launches efficiently.</p>
-    </FormContainer>
+    <div className="space-y-12">
+      <FormContainer 
+        title="Token Factory" 
+        subtitle="// Deploy your own ERC20 factory with custom fee, whitelist, and token tracking." 
+        icon={Hammer} 
+        onAction={handleDeploy} 
+        loading={loading}
+        deployFee={fee}
+        actionLabel="Deploy"
+        onPreviewSource={() => setShowSource(!showSource)}
+      >
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <InputField label="Token Name *" placeholder="e.g. My Token" value={name} onChange={setName} />
+            <InputField label="Token Symbol *" placeholder="e.g. MTK" value={symbol} onChange={setSymbol} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <InputField label="Decimals" placeholder="18" value={decimals} onChange={setDecimals} />
+            <InputField label="Total Supply *" placeholder="e.g. 1000000" value={supply} onChange={setSupply} />
+          </div>
+          
+          <div className="pt-4 border-t border-white/5 space-y-4">
+            <ToggleField label="Mintable" desc="Allow owner to create new tokens" active={mintable} onToggle={setMintable} />
+            <ToggleField label="Burnable" desc="Allow holders to destroy their tokens" active={burnable} onToggle={setBurnable} />
+            <ToggleField label="Pausable" desc="Allow owner to stop transfers" active={pausable} onToggle={setPausable} />
+          </div>
+        </div>
+
+        {txInfo && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="mt-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center"
+          >
+            <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1">Token Deployed Successfully</div>
+            {txInfo.address && <div className="text-white font-mono text-xs mb-2">{shortAddr(txInfo.address)}</div>}
+            <a href={`${litvmChain.blockExplorers.default.url}/tx/${txInfo.hash}`} target="_blank" rel="noreferrer" className="text-[10px] text-white/40 underline uppercase font-bold tracking-widest hover:text-white transition-all">View on Explorer</a>
+          </motion.div>
+        )}
+      </FormContainer>
+
+      <AnimatePresence>
+        {showSource && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <Card className="p-6 bg-black border-white/5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                   <span className="text-[10px] font-bold text-white uppercase tracking-widest">TokenFactory.sol</span>
+                </div>
+                <button onClick={() => { navigator.clipboard.writeText(generateSource()); alert("Copied!"); }} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white uppercase tracking-widest transition-all">
+                  <Copy size={12} /> Copy
+                </button>
+              </div>
+              <pre className="p-6 bg-white/[0.02] border border-white/5 rounded-xl text-[11px] font-mono whitespace-pre text-white/70 overflow-x-auto leading-relaxed max-h-[400px]">
+                <code>{generateSource()}</code>
+              </pre>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-bold text-white tracking-tight">My Deployed Tokens</h3>
+            <p className="text-xs text-brand-text-muted mt-1 uppercase font-bold tracking-widest">List of tokens you launched via this factory</p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">{totalDeployed}</div>
+            <div className="text-[10px] text-brand-text-muted uppercase font-bold tracking-widest">Total Global Launch</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4">
+          {loadingHistory ? (
+            <div className="p-12 text-center bg-white/5 rounded-2xl border border-dashed border-white/10">
+              <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest animate-pulse transition-all">Loading history...</p>
+            </div>
+          ) : deployedTokens.length === 0 ? (
+            <div className="p-12 text-center bg-white/5 rounded-2xl border border-dashed border-white/10">
+              <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">No tokens deployed yet</p>
+            </div>
+          ) : deployedTokens.map((t, i) => (
+            <Card key={i} className="p-5 flex items-center justify-between group hover:border-white/10 transition-all bg-white/[0.01]">
+              <div className="flex items-center gap-5">
+                <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-xl font-bold text-white border border-white/5 group-hover:scale-110 transition-all uppercase tracking-tighter">
+                  {t.symbol.slice(0, 2)}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white">{t.name}</span>
+                    <span className="text-[10px] px-2 py-0.5 bg-white/5 text-brand-text-muted rounded font-mono uppercase tracking-widest font-bold">{t.symbol}</span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1.5 font-mono text-[10px] text-brand-text-muted">
+                    <span>Supply: {formatUnits(t.supply, t.decimals)}</span>
+                    <span className="w-1 h-1 rounded-full bg-white/10" />
+                    <span>{shortAddr(t.address)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {t.mintable && <span className="w-2 h-2 rounded-full bg-emerald-500" title="Mintable" />}
+                {t.burnable && <span className="w-2 h-2 rounded-full bg-orange-500" title="Burnable" />}
+                {t.pausable && <span className="w-2 h-2 rounded-full bg-blue-500" title="Pausable" />}
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 };
 // --- Page: Quests ---
@@ -899,19 +2775,36 @@ const GamesPage = () => {
 // --- Page: Messenger ---
 const MessengerPage = () => {
   const { address, isConnected } = useAccount();
+  const [activeTab, setActiveTab] = useState<'send' | 'inbox'>('send');
+  const [inboxTab, setInboxTab] = useState<'received' | 'sent'>('received');
+  const [msgType, setMsgType] = useState<'public' | 'direct'>('public');
   const [messages, setMessages] = useState<any[]>([]);
+  const [stats, setStats] = useState({ sent: 0, received: 0, total: 0 });
   const [loading, setLoading] = useState(false);
   const [recipient, setRecipient] = useState('');
   const [content, setContent] = useState('');
   const [sending, setSending] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+
+  const fetchStats = async () => {
+    if (!address) return;
+    try {
+      const { getMessengerStats } = await import('./lib/litdex-core-logic');
+      const s = await getMessengerStats(address);
+      setStats(s);
+    } catch (err) { console.error(err); }
+  };
 
   const fetchMessages = async () => {
     if (!address) return;
     setLoading(true);
     try {
-      const { readMessages } = await import('./lib/litdex-core-logic');
-      const data = await readMessages(address);
+      const { getSentMessages, getReceivedMessages } = await import('./lib/litdex-core-logic');
+      const data = inboxTab === 'sent' 
+        ? await getSentMessages(address) 
+        : await getReceivedMessages(address);
       setMessages(data);
+      fetchStats();
     } catch (err) {
       console.error(err);
     } finally {
@@ -921,101 +2814,293 @@ const MessengerPage = () => {
 
   useEffect(() => {
     if (isConnected && address) {
-      fetchMessages();
+      fetchStats();
+      if (activeTab === 'inbox') fetchMessages();
     }
-  }, [isConnected, address]);
+  }, [isConnected, address, activeTab, inboxTab]);
 
   const handleSend = async () => {
-    if (!recipient || !content) return;
+    if (!content) return;
     setSending(true);
     try {
       const { sendMessage } = await import('./lib/litdex-core-logic');
-      await sendMessage(recipient, content);
-      alert("Message sent!");
+      const target = msgType === 'public' ? 'public' : recipient;
+      const txHash = await sendMessage(target, content);
+      
+      // Success flow
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+      
       setContent('');
-      fetchMessages();
+      if (msgType === 'direct') setRecipient('');
+      fetchStats();
     } catch (err) {
-      alert(errMsg(err));
+      console.error(err);
     } finally {
       setSending(false);
     }
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-12 max-w-4xl mx-auto px-4 h-full">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[600px]">
-        {/* Sidebar / New Message */}
-        <Card className="p-6 bg-black/40 border-white/5 backdrop-blur-xl flex flex-col">
-          <h3 className="font-bold text-white mb-6">New Message</h3>
-          <div className="space-y-4 flex-1">
-             <div className="space-y-1">
-               <label className="text-[9px] font-bold text-brand-text-muted uppercase tracking-widest">Recipient Address</label>
-               <input 
-                 value={recipient}
-                 onChange={(e) => setRecipient(e.target.value)}
-                 placeholder="0x..." 
-                 className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-sm text-white focus:border-white/30 outline-none"
-               />
-             </div>
-             <div className="space-y-1">
-               <label className="text-[9px] font-bold text-brand-text-muted uppercase tracking-widest">Message Content</label>
-               <textarea 
-                 value={content}
-                 onChange={(e) => setContent(e.target.value)}
-                 rows={4}
-                 placeholder="Type your encrypted message..." 
-                 className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-sm text-white focus:border-white/30 outline-none resize-none"
-               />
-             </div>
-             <button 
-              onClick={handleSend}
-              disabled={!isConnected || sending}
-              className="w-full py-3 bg-white text-black rounded-xl font-bold text-sm hover:opacity-90 disabled:opacity-50 transition-all"
-             >
-               {sending ? "Sending..." : "Send Message"}
-             </button>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-8 max-w-5xl mx-auto px-4 h-full flex flex-col">
+      {/* Header & Stats Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-black/40 border border-white/5 p-6 rounded-3xl backdrop-blur-2xl">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-white/5 rounded-2xl border border-white/10">
+            <MessageSquare size={24} className="text-white" />
           </div>
-        </Card>
+          <div>
+            <h2 className="text-2xl font-black text-white tracking-tight uppercase">Messenger</h2>
+            <p className="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">LitVM On-Chain Protocol</p>
+          </div>
+        </div>
 
-        {/* Message Feed */}
-        <Card className="md:col-span-2 bg-black/40 border-white/5 backdrop-blur-xl flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-white/5 flex items-center justify-between">
-            <h3 className="font-bold text-white">Inbox</h3>
-            <button onClick={fetchMessages} className="text-[10px] font-bold text-brand-text-muted hover:text-white uppercase tracking-widest">Refresh</button>
+        <div className="flex items-center gap-6 px-6 py-3 bg-white/[0.02] border border-white/5 rounded-2xl">
+          <div className="flex flex-col">
+            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">Sent</span>
+            <span className="text-lg font-black text-white">{stats.sent}</span>
           </div>
-          
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {!isConnected ? (
-              <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
-                <Lock size={32} className="mb-4" />
-                <p className="text-xs font-bold uppercase tracking-widest">Connect wallet to view messages</p>
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
-                <MessageSquare size={32} className="mb-4" />
-                <p className="text-xs font-bold uppercase tracking-widest">No messages yet</p>
-              </div>
-            ) : messages.map((m, i) => (
-              <div key={i} className={cn(
-                "p-4 rounded-2xl max-w-[85%]",
-                m.sender.toLowerCase() === address?.toLowerCase() 
-                  ? "bg-white text-black ml-auto rounded-tr-none shadow-xl" 
-                  : "bg-white/5 border border-white/10 text-white rounded-tl-none"
-              )}>
-                <p className="text-xs break-words">{m.content}</p>
-                <div className="mt-2 flex items-center justify-between gap-4">
-                   <p className={cn("text-[9px] font-mono opacity-50", m.sender.toLowerCase() === address?.toLowerCase() ? "text-black" : "text-white")}>
-                     {m.sender.slice(0, 6)}...{m.sender.slice(-4)}
-                   </p>
-                   <p className={cn("text-[8px] opacity-40", m.sender.toLowerCase() === address?.toLowerCase() ? "text-black" : "text-white")}>
-                     {new Date(Number(m.timestamp) * 1000).toLocaleTimeString()}
-                   </p>
-                </div>
-              </div>
-            ))}
+          <div className="w-px h-8 bg-white/5" />
+          <div className="flex flex-col">
+            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">Received</span>
+            <span className="text-lg font-black text-white">{stats.received}</span>
           </div>
-        </Card>
+          <div className="w-px h-8 bg-white/5" />
+          <div className="flex flex-col">
+            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">Global On-Chain</span>
+            <span className="text-lg font-black text-white">{stats.total}</span>
+          </div>
+        </div>
       </div>
+
+      {/* Main Tabs */}
+      <div className="flex gap-2 mb-6 p-1.5 bg-black/40 border border-white/5 rounded-2xl w-fit">
+        <button 
+          onClick={() => setActiveTab('send')}
+          className={cn(
+            "px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all",
+            activeTab === 'send' ? "bg-white text-black shadow-lg" : "text-white/40 hover:text-white"
+          )}
+        >
+          Send
+        </button>
+        <button 
+          onClick={() => setActiveTab('inbox')}
+          className={cn(
+            "px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all",
+            activeTab === 'inbox' ? "bg-white text-black shadow-lg" : "text-white/40 hover:text-white"
+          )}
+        >
+          Inbox
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      <div className="flex-1 min-h-0">
+        <AnimatePresence mode="wait">
+          {activeTab === 'send' ? (
+            <motion.div 
+              key="send-tab"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="h-full"
+            >
+              <Card className="p-10 bg-black/60 border-white/10 backdrop-blur-3xl h-full flex flex-col relative overflow-hidden">
+                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/[0.02] rounded-full blur-[100px] -mr-32 -mt-32 pointer-events-none" />
+                 
+                 <div className="flex items-center justify-between mb-10 relative z-10">
+                   <div>
+                     <h3 className="text-xl font-black text-white tracking-tight uppercase">Transmit</h3>
+                     <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mt-1">Daily Cap: 10 Messages (20 Points)</p>
+                   </div>
+                   
+                   <div className="flex p-1 bg-white/10 rounded-xl border border-white/10 relative z-20">
+                     <button 
+                       type="button"
+                       id="msg-type-public"
+                       onClick={(e) => { e.stopPropagation(); setMsgType('public'); }}
+                       className={cn(
+                         "px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer",
+                         msgType === 'public' ? "bg-white text-black shadow-lg" : "text-white/40 hover:text-white/60"
+                       )}
+                     >
+                       Public
+                     </button>
+                     <button 
+                       type="button"
+                       id="msg-type-direct"
+                       onClick={(e) => { e.stopPropagation(); setMsgType('direct'); }}
+                       className={cn(
+                         "px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer",
+                         msgType === 'direct' ? "bg-white text-black shadow-lg" : "text-white/40 hover:text-white/60"
+                       )}
+                     >
+                       Direct
+                     </button>
+                   </div>
+                 </div>
+
+                 <div className="space-y-8 flex-1 max-w-2xl relative z-10">
+                    {msgType === 'direct' && (
+                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-3">
+                        <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] ml-1">Recipient Address</label>
+                        <input 
+                          id="messenger-recipient"
+                          value={recipient}
+                          onChange={(e) => setRecipient(e.target.value.trim())}
+                          placeholder="0x... (Recipient Wallet)" 
+                          className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-5 text-sm text-white focus:border-white/30 outline-none transition-all placeholder:text-white/10"
+                        />
+                      </motion.div>
+                    )}
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between ml-1">
+                        <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Message Content</label>
+                        <span className={cn(
+                          "text-[9px] font-mono",
+                          content.length > 1000 ? "text-red-500" : "text-white/20"
+                        )}>
+                          {content.length}/1000
+                        </span>
+                      </div>
+                      <textarea 
+                        value={content}
+                        onChange={(e) => setContent(e.target.value.slice(0, 1000))}
+                        rows={8}
+                        placeholder={msgType === 'public' ? "Broadcast your thoughts to the world..." : "Secure message to recipient..."}
+                        className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-5 text-sm text-white focus:border-white/30 outline-none resize-none transition-all placeholder:text-white/10"
+                      />
+                    </div>
+                 </div>
+
+                 <div className="mt-10 flex items-center gap-6">
+                    <button 
+                      onClick={handleSend}
+                      disabled={!isConnected || sending || !content || (msgType === 'direct' && !recipient)}
+                      className="px-12 py-4 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] disabled:opacity-30 transition-all shadow-[0_0_50px_rgba(255,255,255,0.1)] flex items-center gap-3"
+                    >
+                      {sending ? "TRANSMITTING..." : "AUTHORIZE TRANSMISSION"}
+                    </button>
+                    {!isConnected && (
+                      <p className="text-[10px] text-white/20 font-bold uppercase tracking-widest">Connect wallet to send</p>
+                    )}
+                 </div>
+              </Card>
+            </motion.div>
+          ) : (
+            <motion.div 
+              key="inbox-tab"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="h-full flex flex-col"
+            >
+              <Card className="bg-black/60 border-white/10 backdrop-blur-3xl flex-1 flex flex-col overflow-hidden shadow-2xl">
+                <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                  <div className="flex gap-4 p-1 bg-white/5 rounded-xl border border-white/5 w-fit">
+                    <button 
+                      onClick={() => setInboxTab('received')}
+                      className={cn(
+                        "px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                        inboxTab === 'received' ? "bg-white/10 text-white" : "text-white/40 hover:text-white/60"
+                      )}
+                    >
+                      Received
+                    </button>
+                    <button 
+                      onClick={() => setInboxTab('sent')}
+                      className={cn(
+                        "px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                        inboxTab === 'sent' ? "bg-white/10 text-white" : "text-white/40 hover:text-white/60"
+                      )}
+                    >
+                      Sent
+                    </button>
+                  </div>
+
+                  <button 
+                    onClick={fetchMessages}
+                    disabled={loading}
+                    className="p-3 rounded-xl hover:bg-white/5 text-white/30 hover:text-white transition-all disabled:opacity-30"
+                  >
+                    <RefreshCw size={18} className={cn(loading && "animate-spin")} />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-10 space-y-8 scrollbar-hide">
+                  {!isConnected ? (
+                    <div className="h-full flex flex-col items-center justify-center opacity-20">
+                      <Lock size={48} className="mb-6" />
+                      <p className="text-xs font-black uppercase tracking-[0.3em]">Protocol Encrypted</p>
+                    </div>
+                  ) : loading ? (
+                    <div className="h-full flex flex-col items-center justify-center opacity-40">
+                      <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin mb-4" />
+                      <p className="text-[10px] font-black uppercase tracking-widest text-white/40">Syncing Feed...</p>
+                    </div>
+                  ) : messages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center opacity-20">
+                      <div className="p-8 bg-white/5 rounded-full mb-6">
+                        <MessageSquare size={48} />
+                      </div>
+                      <p className="text-xs font-black uppercase tracking-[0.3em]">No Messages Recorded</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-8">
+                       {messages.map((m, i) => (
+                         <motion.div 
+                           key={i}
+                           initial={{ opacity: 0, x: -20 }}
+                           animate={{ opacity: 1, x: 0 }}
+                           className="flex flex-col gap-2"
+                         >
+                           <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl relative group hover:bg-white/[0.08] transition-all">
+                              <p className="text-sm font-medium text-white/90 leading-relaxed mb-6">{m.content}</p>
+                              
+                              <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                   <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
+                                   <p className="text-[10px] font-mono text-white/30">
+                                      {inboxTab === 'sent' ? `To: ${m.recipient}` : `From: ${m.sender}`}
+                                   </p>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  {m.isPublic && (
+                                    <span className="text-[8px] font-black text-white/20 bg-white/5 px-2 py-0.5 rounded border border-white/5 uppercase tracking-widest">Public</span>
+                                  )}
+                                  <p className="text-[9px] font-black text-white/20 uppercase tracking-tighter">
+                                    {new Date(m.timestamp * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                  </p>
+                                </div>
+                              </div>
+                           </div>
+                         </motion.div>
+                       ))}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Bonus Points Toast */}
+      <AnimatePresence>
+        {showToast && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[100] px-8 py-4 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest shadow-[0_0_50px_rgba(255,255,255,0.3)] flex items-center gap-3"
+          >
+            <div className="w-5 h-5 bg-black rounded-full flex items-center justify-center text-[10px]">P</div>
+            +2 Points Earned
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
@@ -1122,9 +3207,40 @@ const FaucetPage = () => {
 
 // --- NAVIGATION SHELL ---
 
+const WalletBalanceDisplay = () => {
+  const { address, isConnected } = useAccount();
+  const { data: balanceData } = useBalance({ 
+    address,
+  });
+
+  if (!isConnected || !balanceData) {
+    return <div className="px-4 py-1.5 text-[10px] font-bold text-white tracking-widest uppercase border-r border-white/10 mr-1 opacity-50">0.00 zkLTC</div>;
+  }
+
+  const formatted = parseFloat(formatEther(balanceData.value)).toLocaleString(undefined, { 
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 4 
+  });
+
+  return (
+    <div className="px-3 py-1 text-[11px] font-black text-black tracking-widest uppercase border-r border-black/5 mr-1 flex items-center h-full">
+      {formatted} {balanceData.symbol}
+    </div>
+  );
+};
+
 export default function App() {
   const [activePage, setActivePage] = useState<PageID>('swap');
+  const [previousPage, setPreviousPage] = useState<PageID>('swap');
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+
+  // Helper to handle page changes while tracking history for the check-in overlay
+  const handlePageChange = (p: PageID) => {
+    if (p === 'checkin') {
+      if (activePage !== 'checkin') setPreviousPage(activePage);
+    }
+    setActivePage(p);
+  };
 
   // Close dropdown on click outside logic simplified for React
   useEffect(() => {
@@ -1133,12 +3249,12 @@ export default function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const renderPage = () => {
-    switch (activePage) {
+  const renderPage = (page: PageID) => {
+    switch (page) {
       case 'swap': return <SwapPage />;
       case 'pool': return <PoolPage />;
       case 'deploy': return <DeployPage />;
-      case 'points': return <PointsPage />;
+      case 'points': return <PointsPage setPage={setActivePage} />;
       case 'checkin': return <CheckinPage />;
       case 'nfts': return <NFTsPage />;
       case 'messenger': return <MessengerPage />;
@@ -1196,7 +3312,16 @@ export default function App() {
             </div>
 
             {/* Bottom Right Tools */}
-            <div className="pointer-events-auto">
+            <div className="pointer-events-auto flex items-center gap-3">
+              <button 
+                onClick={() => handlePageChange(activePage === 'checkin' ? previousPage : 'checkin')}
+                className={cn(
+                  "relative w-16 h-16 flex items-center justify-center rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all backdrop-blur-3xl shadow-2xl group",
+                  activePage === 'checkin' ? "text-white border-white/20 bg-black/60" : "text-white/60"
+                )}
+              >
+                <CalendarCheck size={24} className={cn("transition-colors", activePage === 'checkin' ? "text-white" : "group-hover:text-white")} />
+              </button>
               <button className="relative w-16 h-16 flex items-center justify-center rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-white/60 backdrop-blur-3xl shadow-2xl group">
                 <Bell size={24} className="group-hover:text-white transition-colors" />
                 <div className="absolute top-5 right-5 w-2.5 h-2.5 bg-white rounded-full ring-4 ring-brand-bg shadow-[0_0_15px_rgba(255,255,255,0.8)]" />
@@ -1210,37 +3335,77 @@ export default function App() {
             {({ account, chain, openConnectModal, openAccountModal, mounted }) => {
               const connected = mounted && account && chain;
               return (
-                <button
-                  onClick={connected ? openAccountModal : openConnectModal}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white text-black hover:bg-white/90 active:scale-95 transition-all text-[9px] font-bold uppercase tracking-[0.2em] shadow-[0_0_40px_rgba(255,255,255,0.15)]"
-                >
-                  <Wallet size={14} />
-                  {connected ? `${account.address.slice(0, 6)}...${account.address.slice(-4)}` : 'Connect'}
-                </button>
+                <div className={cn("flex items-center gap-1 bg-white rounded-full p-1 h-10 shadow-[0_0_40px_rgba(255,255,255,0.2)]", !connected && "bg-transparent shadow-none p-0")}>
+                  {connected && <WalletBalanceDisplay />}
+                  <button
+                    onClick={connected ? openAccountModal : openConnectModal}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2 rounded-full transition-all text-[9px] font-black uppercase tracking-[0.2em] h-full",
+                      connected 
+                        ? "bg-black/5 text-black hover:bg-black/10" 
+                        : "bg-white text-black hover:bg-white/90 shadow-[0_0_30px_rgba(255,255,255,0.15)]"
+                    )}
+                  >
+                    {connected ? (
+                       <>
+                         <span className="opacity-80">{account.displayName}</span>
+                         <ChevronDown size={14} className="opacity-40" />
+                       </>
+                    ) : (
+                      <><Wallet size={12} /> Connect</>
+                    )}
+                  </button>
+                </div>
               );
             }}
           </ConnectButton.Custom>
         </div>
 
         <AnimatedNavFramer 
-          onPageChange={(page) => setActivePage(page as PageID)} 
-          activePage={activePage}
+          onPageChange={(page) => handlePageChange(page as PageID)} 
+          activePage={activePage === 'checkin' ? previousPage : activePage}
         />
 
         {/* Main Content */}
-        <main className="container mx-auto px-6 pt-24 pb-12 flex-1">
+        <main className={cn(
+          "container mx-auto px-6 pt-24 pb-12 flex-1 transition-all duration-500",
+          activePage === 'checkin' && "blur-xl scale-[0.98] opacity-30 pointer-events-none"
+        )}>
           <AnimatePresence mode="wait">
             <motion.div
-              key={activePage}
+              key={activePage === 'checkin' ? previousPage : activePage}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.15, ease: "easeOut" }}
             >
-              {renderPage()}
+              {renderPage(activePage === 'checkin' ? previousPage : activePage)}
             </motion.div>
           </AnimatePresence>
         </main>
+
+        {/* Check-in Overlay */}
+        <AnimatePresence>
+          {activePage === 'checkin' && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => handlePageChange(previousPage)}
+                className="absolute inset-0 bg-black/20"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="relative z-10 w-full max-w-xl"
+              >
+                <CheckinPage />
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Footer */}

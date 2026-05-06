@@ -15,6 +15,11 @@
   --color-brand-teal-glow: rgba(255, 255, 255, 0.1);
   --color-brand-danger: #F85149;
   --color-brand-warning: #F0883E;
+
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
 }
 
 @layer base {

@@ -76,6 +76,7 @@ export const LITVM_FACTORY_ADDRESS   = "0xdd56517bFfDf6915918DbEDf1124b5F21D26f6
 export const POINTS_SYSTEM_ADDRESS  = "0x5Ca1ce5fe101694cb233007F2516ff52450b505B";
 export const DAILY_CHECKIN_ADDRESS  = "0xBFcdf8b8bb7e779E382c65ca171fa1ee603E9BEa";
 export const LITDEX_NFT_ADDRESS     = "0x63C40F0F6A7D4AcE71f6Ccaf1BB588De9701b251";
+export const MESSENGER_CONTRACT     = "0xF217b77F287189b652514764411E32822e8BBd36";
 
 // ── Reward / utility tokens ─────────────────────────────────────────────
 export const LDEX_TOKEN_ADDRESS = "0xBAaba603e6298fbb76325a6B0d47Cd57154ca641";
@@ -117,6 +118,7 @@ export const ROUTER_ABI = [
 export const FACTORY_ABI = [
   "function getPair(address tokenA, address tokenB) view returns (address pair)",
   "function allPairsLength() view returns (uint)",
+  "function allPairs(uint256) view returns (address)",
 ] as const;
 
 export const PAIR_ABI = [
@@ -249,6 +251,15 @@ export const LITDEX_NFT_ABI = [
   { inputs: [{ name: "user", type: "address" }], name: "userPoints", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" },
 ] as const;
 
+export const MESSENGER_ABI = [
+  {"inputs":[{"name":"content","type":"string"}],"name":"sendPublic","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"name":"recipient","type":"address"},{"name":"content","type":"string"}],"name":"sendDirect","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"name":"user","type":"address"}],"name":"getSentIds","outputs":[{"type":"uint256[]"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"user","type":"address"}],"name":"getReceivedIds","outputs":[{"type":"uint256[]"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"msgId","type":"uint256"}],"name":"getMessage","outputs":[{"name":"sender","type":"address"},{"name":"recipient","type":"address"},{"name":"content","type":"string"},{"name":"timestamp","type":"uint256"},{"name":"isPublic","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"name":"user","type":"address"}],"name":"getStats","outputs":[{"name":"sent","type":"uint256"},{"name":"received","type":"uint256"},{"name":"total","type":"uint256"}],"stateMutability":"view","type":"function"}
+] as const;
+
 /* =====================================================================
  * SECTION 4 — TOKEN LISTS / ROUTING
  * ===================================================================== */
@@ -264,32 +275,32 @@ export const POPULAR_TOKENS: Token[] = [
   { 
     address: "0xFC43ABE529CDC61B7F0aa2e677451AFd83d2B304", 
     symbol: "USDC", 
-    image: "/logos/usdc.jpg" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/USDC.png" 
   },
   { 
     address: "0x6858790e164a8761a711BAD1178220C5AebcF7eC", 
     symbol: "PEPE", 
-    image: "/logos/pepe.jpg" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/PEPE.png" 
   },
   { 
     address: "0xa38c318a0B755154b25f28cAD7b2312747B073C6", 
     symbol: "USDT", 
-    image: "/logos/usdt.jpg" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/USDT.png" 
   },
   { 
     address: "0xFC73cdB75F37B0da829c4e54511f410D525B76b2", 
     symbol: "Lester", 
-    image: "/logos/lester.jpg" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/Lester.png" 
   },
   { 
     address: "0x68Bf11e64cfD939fE1761012862FBFE47048118e", 
     symbol: "WETH", 
-    image: "/logos/weth.jpg" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/WETH.png" 
   },
   { 
     address: "0xcFe6BE457D366329CCdeE7fBC48aBf1d6FFeB9C0", 
     symbol: "WBTC", 
-    image: "/logos/wbtc.jpg" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/WBTC.png" 
   },
   { 
     address: "0xBAaba603e6298fbb76325a6B0d47Cd57154ca641", 
@@ -299,37 +310,37 @@ export const POPULAR_TOKENS: Token[] = [
   { 
     address: "0x314522DD1B3f74Dd1DdE03E5B5a628C28134b25d", 
     symbol: "zkPEPE", 
-    image: "/logos/zkpepe.jpg" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/zkPEPE.png" 
   },
   { 
     address: "0xaf9F497007342Dd025Ff696964A736Ec9584c3dd", 
     symbol: "zkETH", 
-    image: "/logos/zketh.jpg" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/zkETH.png" 
   },
   { 
     address: "0xF425553A84e579BE353a6180F7d53d8101bfb3E4", 
     symbol: "LDTOAD", 
-    image: "/logos/litoad.jpg" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/LDTOAD.png" 
   },
   { 
     address: "0x60DD65bAd8a73Dfd8DF029C4e3b372d575B03BC2", 
     symbol: "USDC.t", 
-    image: "/logos/usdc.jpg" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/USDC.png" 
   },
   { 
     address: "0xd8C4e6dBe48472d6C563eB1cc330207d020D4c8f", 
     symbol: "YURI", 
-    image: "/logos/yuri.jpg" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/YURI.png" 
   },
   { 
     address: "0x05149f41AFE7ca712D6A42390e8047E0f2887284", 
     symbol: "CHAWLEE", 
-    image: "/logos/chawlee.jpg" 
+    image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/CHAWLEE.png" 
   },
 ];
 
 export const SWAP_TOKENS: Token[] = [
-  { address: NATIVE_SENTINEL, symbol: "zkLTC", image: "/logos/zkltc.jpg" },
+  { address: NATIVE_SENTINEL, symbol: "zkLTC", image: "https://raw.githubusercontent.com/0xDarkSeidBull/litvmuidemo/main/public/logos/zkLTC.png" },
   ...POPULAR_TOKENS,
 ];
 
@@ -461,6 +472,17 @@ export async function approveToken(
   return tx.hash as string;
 }
 
+/** Get allowance for a token. */
+export async function getAllowance(
+  tokenAddr: string,
+  owner: string,
+  spender: string,
+): Promise<bigint> {
+  if (isNativeAddr(tokenAddr)) return parseEther("1000000000"); // Infinite for native
+  const c = new Contract(tokenAddr, ERC20_ABI, readProvider);
+  return BigInt(await c.allowance(owner, spender));
+}
+
 /**
  * Execute a swap. Caller passes wei-denominated amounts.
  * Returns the receipt's tx hash.
@@ -501,6 +523,7 @@ export async function swap(opts: {
 export type PairState = {
   pairAddress: string;       // "" if not yet deployed
   token0: string;
+  token1: string;
   reserves: [bigint, bigint];
   totalSupply: bigint;
   userBalance: bigint;
@@ -518,11 +541,12 @@ export async function loadPair(
   const f = new Contract(DEFAULT_FACTORY, FACTORY_ABI, readProvider);
   const p = String(await f.getPair(a0, b0));
   if (p === "0x0000000000000000000000000000000000000000") {
-    return { pairAddress: "", token0: "", reserves: [0n, 0n], totalSupply: 0n, userBalance: 0n, userAllowance: 0n };
+    return { pairAddress: "", token0: "", token1: "", reserves: [0n, 0n], totalSupply: 0n, userBalance: 0n, userAllowance: 0n };
   }
   const pair = new Contract(p, PAIR_ABI, readProvider);
-  const [t0, reserves, ts, bal, allow] = await Promise.all([
+  const [t0, t1, reserves, ts, bal, allow] = await Promise.all([
     pair.token0() as Promise<string>,
+    pair.token1() as Promise<string>,
     pair.getReserves() as Promise<[bigint, bigint, number]>,
     pair.totalSupply() as Promise<bigint>,
     walletAddr ? (pair.balanceOf(walletAddr) as Promise<bigint>) : Promise.resolve(0n),
@@ -531,6 +555,7 @@ export async function loadPair(
   return {
     pairAddress: p,
     token0: t0,
+    token1: t1,
     reserves: [reserves[0], reserves[1]],
     totalSupply: ts,
     userBalance: bal,
@@ -587,6 +612,66 @@ export async function removeLiquidity(opts: {
   return (receipt?.hash ?? tx.hash) as string;
 }
 
+export type LPPosition = {
+  pairAddress: string;
+  token0: string;
+  token1: string;
+  lpBalance: bigint;
+  reserve0: bigint;
+  reserve1: bigint;
+  totalSupply: bigint;
+  share: bigint; // basis points (10000 = 100%)
+};
+
+/** Fetch all LP positions for a user with parallel execution. */
+export async function getUserLPPositions(walletAddress: string): Promise<LPPosition[]> {
+  const factory = new Contract(DEFAULT_FACTORY, FACTORY_ABI, readProvider);
+  const totalPairsCount = await factory.allPairsLength();
+  const totalPairs = Number(totalPairsCount);
+  const positions: LPPosition[] = [];
+
+  // Limit pairs to avoid RPC overhead, but fetch in parallel
+  const limit = Math.min(totalPairs, 50);
+  const pairIndices = Array.from({ length: limit }, (_, i) => i);
+
+  const pairAddresses = await Promise.all(
+    pairIndices.map(i => factory.allPairs(i).catch(() => null))
+  );
+
+  const results = await Promise.all(
+    pairAddresses.map(async (addr) => {
+      if (!addr || addr === "0x0000000000000000000000000000000000000000") return null;
+      try {
+        const pair = new Contract(addr, PAIR_ABI, readProvider);
+        const lpBalance = await pair.balanceOf(walletAddress);
+        if (BigInt(lpBalance) === 0n) return null;
+
+        const [token0, token1, reserves, totalSupply] = await Promise.all([
+          pair.token0(),
+          pair.token1(),
+          pair.getReserves(),
+          pair.totalSupply(),
+        ]);
+
+        return {
+          pairAddress: addr as string,
+          token0: token0 as string,
+          token1: token1 as string,
+          lpBalance: BigInt(lpBalance),
+          reserve0: BigInt(reserves[0]),
+          reserve1: BigInt(reserves[1]),
+          totalSupply: BigInt(totalSupply),
+          share: totalSupply > 0n ? (BigInt(lpBalance) * 10000n / BigInt(totalSupply)) : 0n,
+        };
+      } catch (e) {
+        return null;
+      }
+    })
+  );
+
+  return results.filter((r): r is LPPosition => r !== null);
+}
+
 /* =====================================================================
  * SECTION 9 — DEPLOY TOKEN LOGIC (LitDeXDeployer)
  * Backend relayer auto-credits +5 points per deploy on PointsSystemV5.
@@ -609,6 +694,7 @@ export async function deployTokenLitDeX(opts: {
     opts.name.trim(),
     opts.symbol.trim(),
     BigInt(opts.totalSupply),
+    { value: parseEther("0.05") }
   );
   const receipt = await tx.wait();
   let tokenAddress: string | undefined;
@@ -1103,29 +1189,181 @@ export async function deployNFT(name: string, symbol: string): Promise<string> {
   return tx.hash;
 }
 
-/** Deployment wrapper for Staking. */
-export async function deployStaking(rewardToken: string): Promise<string> {
+/** Enhanced NFT Deployment via LitVM Factory. */
+export async function deployNFTLitDeX(opts: {
+  name: string;
+  symbol: string;
+  maxSupply: number;
+  mintPrice: bigint;
+  baseURI: string;
+}): Promise<DeployedTokenResult> {
   const factory = await getSignerContract(LITVM_FACTORY_ADDRESS, LITVM_FACTORY_ABI);
   const fee = await factory.deployFee();
-  const tx = await factory.deployStaking(rewardToken, rewardToken, 100n, 30n, "Staking Pool", { value: fee });
-  await tx.wait();
-  return tx.hash;
+  
+  const tx = await factory.deployNFT(
+    opts.name,
+    opts.symbol,
+    opts.baseURI,
+    BigInt(opts.maxSupply),
+    opts.mintPrice,
+    true, // publicMint
+    { value: fee }
+  );
+  
+  const receipt = await tx.wait();
+  let tokenAddress: string | undefined;
+  
+  // Parse ContractDeployed event
+  try {
+    for (const log of receipt?.logs ?? []) {
+      try {
+        const parsed = factory.interface.parseLog(log);
+        if (parsed?.name === "ContractDeployed") {
+          tokenAddress = parsed.args[0] as string;
+          break;
+        }
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+  
+  return { txHash: (receipt?.hash ?? tx.hash) as string, tokenAddress };
+}
+
+/** Deployment wrapper for Staking. */
+export async function deployStaking(
+  stakingToken: string,
+  rewardToken: string,
+  rewardRatePerDay: bigint,
+  lockPeriodDays: bigint,
+  label: string
+): Promise<{ txHash: string; contractAddress?: string }> {
+  const factory = await getSignerContract(LITVM_FACTORY_ADDRESS, LITVM_FACTORY_ABI);
+  const fee = await factory.deployFee();
+  const tx = await factory.deployStaking(
+    stakingToken,
+    rewardToken,
+    rewardRatePerDay,
+    lockPeriodDays,
+    label,
+    { value: fee }
+  );
+  const receipt = await tx.wait();
+  let contractAddress: string | undefined;
+  try {
+    for (const log of receipt?.logs ?? []) {
+      try {
+        const parsed = factory.interface.parseLog(log);
+        if (parsed?.name === "ContractDeployed") {
+          contractAddress = parsed.args[0] as string;
+          break;
+        }
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+  return { txHash: (receipt?.hash ?? tx.hash) as string, contractAddress };
+}
+
+/** Read deployment fee for the multi-factory. */
+export async function readDeployFee(): Promise<bigint> {
+  const factory = new Contract(LITVM_FACTORY_ADDRESS, LITVM_FACTORY_ABI, readProvider);
+  return await factory.deployFee();
 }
 
 /** Deployment wrapper for Vesting. */
-export async function deployVesting(token: string): Promise<string> {
+export async function deployVesting(
+  token: string,
+  beneficiary: string,
+  totalAmount: bigint,
+  cliffDays: bigint,
+  durationDays: bigint,
+  revocable: boolean,
+  label: string
+): Promise<{ txHash: string; contractAddress?: string }> {
   const factory = await getSignerContract(LITVM_FACTORY_ADDRESS, LITVM_FACTORY_ABI);
   const fee = await factory.deployFee();
-  // Using dummy beneficiary for demo
-  const tx = await factory.deployVesting(token, "0x0000000000000000000000000000000000000000", 1000n, 90n, 365n, true, "Token Vesting", { value: fee });
-  await tx.wait();
-  return tx.hash;
+  const tx = await factory.deployVesting(
+    token,
+    beneficiary,
+    totalAmount,
+    cliffDays,
+    durationDays,
+    revocable,
+    label,
+    { value: fee }
+  );
+  const receipt = await tx.wait();
+  let contractAddress: string | undefined;
+  try {
+    for (const log of receipt?.logs ?? []) {
+      try {
+        const parsed = factory.interface.parseLog(log);
+        if (parsed?.name === "ContractDeployed") {
+          contractAddress = parsed.args[0] as string;
+          break;
+        }
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+  return { txHash: (receipt?.hash ?? tx.hash) as string, contractAddress };
 }
 
-/** Deployment wrapper for Token Factory (Factory of Factories). */
-export async function deployFactory(): Promise<string> {
-  // LitVM Factory is itself a factory.
-  return "0x... (Use existing factory)";
+/** Deployment wrapper for Token Factory (Shared Legacy Factory at afb82a10...). */
+export async function deployTokenLegacy(opts: {
+  name: string;
+  symbol: string;
+  decimals: number;
+  totalSupply: bigint;
+  mintable: boolean;
+  burnable: boolean;
+  pausable: boolean;
+}): Promise<{ txHash: string; tokenAddress?: string }> {
+  const factory = await getSignerContract(TOKEN_FACTORY_ADDRESS, TOKEN_FACTORY_ABI);
+  const fee = await factory.deployFee();
+  const tx = await factory.deployToken(
+    opts.name,
+    opts.symbol,
+    opts.decimals,
+    opts.totalSupply,
+    opts.mintable,
+    opts.burnable,
+    opts.pausable,
+    { value: fee }
+  );
+  const receipt = await tx.wait();
+  let tokenAddress: string | undefined;
+  try {
+    for (const log of receipt?.logs ?? []) {
+      try {
+        const parsed = factory.interface.parseLog(log);
+        if (parsed?.name === "TokenDeployed") {
+          tokenAddress = parsed.args[0] as string;
+          break;
+        }
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+  return { txHash: (receipt?.hash ?? tx.hash) as string, tokenAddress };
+}
+
+export async function readLegacyDeployFee(): Promise<bigint> {
+  const factory = new Contract(TOKEN_FACTORY_ADDRESS, TOKEN_FACTORY_ABI, readProvider);
+  return await factory.deployFee();
+}
+
+export async function getLegacyTokensByCreator(creator: string): Promise<string[]> {
+  const factory = new Contract(TOKEN_FACTORY_ADDRESS, TOKEN_FACTORY_ABI, readProvider);
+  return await factory.getTokensByCreator(creator);
+}
+
+export async function getLegacyTokenInfo(tokenAddr: string) {
+  const factory = new Contract(TOKEN_FACTORY_ADDRESS, TOKEN_FACTORY_ABI, readProvider);
+  return await factory.getTokenInfo(tokenAddr);
+}
+
+export async function getLegacyTotalDeployedDisplay(): Promise<number> {
+  const factory = new Contract(TOKEN_FACTORY_ADDRESS, TOKEN_FACTORY_ABI, readProvider);
+  const n = await factory.getTotalDeployed();
+  return Number(n) + DEPLOY_COUNT_BASE;
 }
 
 /** Wrapper for Quests. */
@@ -1167,12 +1405,99 @@ export async function startGame(gameId: string) {
     return res;
 }
 
-/** Mock for Messenger (since no contract was provided in core logic file). */
-export async function readMessages(address: string): Promise<any[]> {
-  console.log("Reading messages for", address);
-  return [];
+/** Real Messenger Logic using LitDeXMessenger contract. */
+export async function getMessengerStats(address: string) {
+  try {
+    const contract = new Contract(MESSENGER_CONTRACT, MESSENGER_ABI, readProvider);
+    const stats = await contract.getStats(address);
+    return {
+      sent: Number(stats.sent),
+      received: Number(stats.received),
+      total: Number(stats.total)
+    };
+  } catch (error) {
+    console.error("Error reading messenger stats:", error);
+    return { sent: 0, received: 0, total: 0 };
+  }
 }
+
+async function getMessagesByIds(ids: any[]) {
+  if (ids.length === 0) return [];
+  try {
+    const contract = new Contract(MESSENGER_CONTRACT, MESSENGER_ABI, readProvider);
+    const messagePromises = ids.map(id => contract.getMessage(id));
+    const rawMessages = await Promise.all(messagePromises);
+    return rawMessages.map((m: any) => ({
+      sender: m.sender,
+      recipient: m.recipient,
+      content: m.content,
+      timestamp: Number(m.timestamp),
+      isPublic: m.isPublic
+    })).sort((a, b) => b.timestamp - a.timestamp);
+  } catch (error) {
+    console.error("Error fetching messages by IDs:", error);
+    return [];
+  }
+}
+
+export async function getSentMessages(address: string) {
+  const contract = new Contract(MESSENGER_CONTRACT, MESSENGER_ABI, readProvider);
+  const ids = await contract.getSentIds(address);
+  return getMessagesByIds(ids);
+}
+
+export async function getReceivedMessages(address: string) {
+  const contract = new Contract(MESSENGER_CONTRACT, MESSENGER_ABI, readProvider);
+  const ids = await contract.getReceivedIds(address);
+  return getMessagesByIds(ids);
+}
+
+export async function readMessages(address: string): Promise<any[]> {
+  try {
+    const contract = new Contract(MESSENGER_CONTRACT, MESSENGER_ABI, readProvider);
+    
+    // Fetch sent and received message IDs
+    const [sentIds, receivedIds] = await Promise.all([
+      contract.getSentIds(address),
+      contract.getReceivedIds(address)
+    ]);
+
+    // Combine and deduplicate IDs
+    const allIds = Array.from(new Set([...sentIds, ...receivedIds]));
+    return getMessagesByIds(allIds);
+  } catch (error) {
+    console.error("Error reading messages:", error);
+    return [];
+  }
+}
+
 export async function sendMessage(to: string, content: string): Promise<string> {
-  console.log("Sending message to", to, content);
-  return "0xmockhash";
+  const eth = (window as any).ethereum;
+  if (!eth) throw new Error("Wallet not found");
+  const provider = new BrowserProvider(eth);
+  const signer = await provider.getSigner();
+  const contract = new Contract(MESSENGER_CONTRACT, MESSENGER_ABI, signer);
+
+  let tx;
+  if (!to || to.trim() === "" || to.toLowerCase() === "public") {
+    tx = await contract.sendPublic(content);
+  } else {
+    tx = await contract.sendDirect(to, content);
+  }
+  
+  const receipt = await tx.wait();
+  
+  // POST https://api.test-hub.xyz/msg/sent
+  try {
+    const address = await signer.getAddress();
+    await fetch("https://api.test-hub.xyz/msg/sent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wallet: address })
+    });
+  } catch (e) {
+    console.warn("Telemetry failed:", e);
+  }
+
+  return receipt.hash;
 }
