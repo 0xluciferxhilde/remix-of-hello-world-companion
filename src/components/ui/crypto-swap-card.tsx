@@ -438,7 +438,7 @@ function TokenSelector({
         ].join(" ")}
         title="Choose token"
       >
-        {selected?.symbol === "zkLTC" || selected?.symbol === "LDEX" ? (
+        {selected?.symbol === "LDEX" ? (
           <div className="size-5 rounded-full bg-white flex items-center justify-center">
              <LogoLD size={14} />
           </div>
@@ -501,7 +501,7 @@ function TokenSelector({
               )}
               {filtered.map((c, idx) => {
                 const active = idx === activeIndex
-                const isLD = c.symbol === "zkLTC" || c.symbol === "LDEX"
+                const isLD = c.symbol === "LDEX"
 
                 return (
                   <button
