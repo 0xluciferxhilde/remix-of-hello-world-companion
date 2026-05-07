@@ -964,11 +964,11 @@ const NFTsPage = () => {
               const info = NFT_TIER_META.find(t => t.nftType === nft.nftType) || NFT_TIER_META[0];
               return (
                 <div key={i} className="rounded-2xl border border-white/10 bg-brand-surface overflow-hidden">
-                  <div className="relative aspect-square bg-brand-surface-2 p-6">
+                  <div className="relative bg-[#080808]">
                     <div className="absolute top-4 right-4 px-2 py-1 rounded-md bg-brand-bg/80 backdrop-blur-md border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white z-10">
                       {info.rarity}
                     </div>
-                    <NFTIcon label={info.label} color={info.color} />
+                    <StackIcon tier={info.tier} />
                   </div>
                   <div className="p-4">
                     <h3 className="font-bold">{info.name}</h3>
