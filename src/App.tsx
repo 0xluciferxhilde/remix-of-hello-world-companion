@@ -1181,7 +1181,7 @@ const FormContainer = ({ title, subtitle, icon: Icon, children, deployFee = "0.0
           !onPreviewSource && "md:col-span-2"
         )}
        >
-         <Rocket size={16} /> {loading ? "Deploying..." : actionLabel.includes('(') ? actionLabel : `${actionLabel || "Deploy"} (${deployFee} zkLTC)`}
+         <Rocket size={16} /> {loading ? "Deploying..." : (actionLabel || "Deploy")}
        </button>
     </div>
   </Card>
