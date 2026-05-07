@@ -2585,6 +2585,7 @@ contract LitVMTokenFactory is Ownable {
 const QuestsPage = () => {
   const { address, isConnected } = useAccount();
   const [completed, setCompleted] = useState<Record<string, boolean>>({});
+  const [visited, setVisited] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [QUESTS_LIST, setQuestsList] = useState<any[]>([]);
 
@@ -2627,6 +2628,7 @@ const QuestsPage = () => {
     try {
       const { questApi } = await import('./lib/litdex-core-logic');
       try { await questApi.complete(address, questId); } catch { /* tolerate */ }
+      const quest = QUESTS_LIST.find(q => q.id === questId);
       setCompleted(prev => {
         const next = { ...prev, [questId]: true };
         if (cacheKey) {
@@ -2634,6 +2636,18 @@ const QuestsPage = () => {
         }
         return next;
       });
+      if (quest) {
+        addNotif(address, {
+          type: "quest",
+          title: "Quest Completed",
+          message: `${quest.title} completed! +${quest.pts} points`,
+        });
+        addNotif(address, {
+          type: "points",
+          title: "Points Earned",
+          message: `+${quest.pts} points earned from quest`,
+        });
+      }
     } finally {
       setBusy(null);
     }
