@@ -22,7 +22,7 @@
  * ----------------------------------------------------------------------------
  */
 
-import { BrowserProvider, Contract, JsonRpcProvider, parseEther, formatEther } from "ethers";
+import { BrowserProvider, Contract, JsonRpcProvider, parseEther, parseUnits, formatEther } from "ethers";
 import { defineChain, parseAbi } from "viem";
 import { http } from "wagmi";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
