@@ -151,7 +151,7 @@ export const WZKLTC_ABI = [
 
 // ── LitDeX Deployer (points-earning, no fee) ────────────────────────────
 export const LITDEX_DEPLOYER_ABI = [
-  "function deployToken(string _name, string _symbol, uint256 _supply) payable returns (address)",
+  "function deployToken(string _name, string _symbol, uint256 _supply) returns (address)",
   "function totalDeployed() view returns (uint256)",
   "event TokenDeployed(address indexed deployer, address indexed token, string symbol)",
 ] as const;
