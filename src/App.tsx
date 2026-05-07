@@ -3641,18 +3641,18 @@ export default function App() {
             <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-white text-sm font-bold">
               <LogoLD size={14} />
             </div>
-            <span className="text-brand-text-muted text-xs font-mono">LitDeX Mainnet v1.0.4-stable</span>
+            <span className="text-brand-text-muted text-xs font-mono">LitDeX Testnet</span>
           </div>
-          <div className="flex gap-8 text-[10px] uppercase font-bold tracking-[0.2em] text-brand-text-muted">
-            <a href="#" className="hover:text-brand-teal transition-colors">Twitter (X)</a>
-            <a href="#" className="hover:text-brand-teal transition-colors">Discord</a>
-            <a href="#" className="hover:text-brand-teal transition-colors">Github</a>
-            <a href="#" className="hover:text-brand-teal transition-colors">Terms</a>
+          <div className="flex gap-8 text-xs uppercase font-mono tracking-widest text-brand-text-muted">
+            <a href="https://x.com/LitDeXApp" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Twitter (X)</a>
+            <a href="https://t.me/litdex_discussion" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Telegram</a>
+            <a href="https://litdex.gitbook.io/litdex/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Docs</a>
           </div>
         </div>
       </footer>
 
       <NotificationsPanel open={notifOpen} onClose={() => setNotifOpen(false)} wallet={walletAddr} />
+      <FaucetModal open={faucetModalOpen} onClose={() => setFaucetModalOpen(false)} wallet={walletAddr} />
     </div>
   );
 }
