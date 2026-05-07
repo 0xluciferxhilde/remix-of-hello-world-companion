@@ -551,10 +551,12 @@ export async function removeLiquidity(opts: {
 }): Promise<string> {
   const router = await getSignerContract(DEFAULT_ROUTER, ROUTER_ABI);
   const deadline = Math.floor(Date.now() / 1000) + (opts.deadlineSec ?? SWAP_DEADLINE_SEC);
+  const aIsNative = isNativeAddr(opts.tokenAAddr) || opts.tokenAAddr.toLowerCase() === WZKLTC_ADDR.toLowerCase();
+  const bIsNative = isNativeAddr(opts.tokenBAddr) || opts.tokenBAddr.toLowerCase() === WZKLTC_ADDR.toLowerCase();
   let tx;
-  if (isNativeAddr(opts.tokenAAddr) && !isNativeAddr(opts.tokenBAddr)) {
+  if (aIsNative && !bIsNative) {
     tx = await router.removeLiquidityZKLTC(opts.tokenBAddr, opts.lpWei, 0, 0, opts.recipient, deadline);
-  } else if (isNativeAddr(opts.tokenBAddr) && !isNativeAddr(opts.tokenAAddr)) {
+  } else if (bIsNative && !aIsNative) {
     tx = await router.removeLiquidityZKLTC(opts.tokenAAddr, opts.lpWei, 0, 0, opts.recipient, deadline);
   } else {
     tx = await router.removeLiquidity(opts.tokenAAddr, opts.tokenBAddr, opts.lpWei, 0, 0, opts.recipient, deadline);

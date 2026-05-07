@@ -1181,7 +1181,7 @@ const FormContainer = ({ title, subtitle, icon: Icon, children, deployFee = "0.0
           !onPreviewSource && "md:col-span-2"
         )}
        >
-         <Rocket size={16} /> {loading ? "Deploying..." : actionLabel.includes('(') ? actionLabel : `${actionLabel || "Deploy"} (${deployFee} zkLTC)`}
+         <Rocket size={16} /> {loading ? "Deploying..." : (actionLabel || "Deploy")}
        </button>
     </div>
   </Card>
@@ -1461,7 +1461,7 @@ const ERC20Form = ({ onDeployed }: any) => {
             </button>
 
             <div className="text-center space-y-2">
-              <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">0.05 zkLTC fee per deploy</p>
+              <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">Free deployment</p>
               <div className="flex items-center justify-center gap-2 text-white/50">
                 <Sparkles size={12} />
                 <span className="text-[9px] font-bold uppercase tracking-widest">+5 points earned automatically (10/100 today)</span>
@@ -3003,6 +3003,25 @@ const GamesPage = () => {
   };
 
   return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-20 max-w-3xl mx-auto px-4">
+      <Card className="p-12 bg-black/40 border-white/5 backdrop-blur-3xl shadow-2xl text-center relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.05),transparent_60%)] pointer-events-none" />
+        <div className="relative z-10 flex flex-col items-center gap-6">
+          <div className="w-24 h-24 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center text-white shadow-[0_0_40px_rgba(255,255,255,0.08)]">
+            <Lock size={44} strokeWidth={1.5} />
+          </div>
+          <h1 className="text-4xl font-black tracking-tighter text-white">Games Locked</h1>
+          <p className="text-brand-text-muted max-w-md text-sm leading-relaxed">
+            The gaming arena is being forged. Stay tuned — Gaming Fuel and rewards will go live soon.
+          </p>
+          <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/30 mt-2">Coming Soon</div>
+        </div>
+      </Card>
+    </motion.div>
+  );
+
+  // eslint-disable-next-line no-unreachable
+  return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-12 max-w-6xl mx-auto px-4">
       <Card className="p-10 mb-12 flex flex-col md:flex-row items-center justify-between gap-12 bg-black/40 text-center md:text-left border-white/5 backdrop-blur-xl group overflow-hidden relative">
         <div className="absolute top-0 right-0 w-96 h-96 bg-white/[0.01] rounded-full blur-3xl -mr-48 -mt-48 transition-all group-hover:bg-white/[0.03]" />
@@ -3530,7 +3549,7 @@ const WalletBalanceDisplay = () => {
   });
 
   return (
-    <div className="px-3 py-1 text-[11px] font-black text-black tracking-widest uppercase border-r border-black/5 mr-1 flex items-center h-full">
+    <div className="px-4 py-1.5 text-[10px] font-black text-black tracking-widest uppercase rounded-full bg-white shadow-[0_0_30px_rgba(255,255,255,0.15)]">
       {formatted} {balanceData.symbol}
     </div>
   );
@@ -3790,9 +3809,6 @@ export default function App() {
           </div>
           <div className="absolute -inset-2 bg-white/20 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
         </div>
-        <div className="flex flex-col -gap-1">
-          <span className="text-2xl sm:text-3xl font-black tracking-tighter text-white leading-none italic group-hover:tracking-normal transition-all duration-700">LitDeX</span>
-        </div>
       </div>
 
       <div className="flex-1 relative flex flex-col">
@@ -3838,19 +3854,18 @@ export default function App() {
         </div>
 
         {/* Top Right Tools (Kept Fixed/Top for now as it doesn't collide with footer) */}
-        <div className="fixed top-8 right-8 z-50 hidden lg:flex items-center gap-3">
+        <div className="fixed top-8 right-8 z-50 hidden lg:flex flex-col items-end gap-2" style={{ transform: 'scale(0.85)', transformOrigin: 'top right' }}>
           <ConnectButton.Custom>
             {({ account, chain, openConnectModal, openAccountModal, mounted }) => {
               const connected = mounted && account && chain;
               return (
-                <div className={cn("flex items-center gap-1 bg-white rounded-full p-1 h-10 shadow-[0_0_40px_rgba(255,255,255,0.2)]", !connected && "bg-transparent shadow-none p-0")}>
-                  {connected && <WalletBalanceDisplay />}
+                <div className="flex flex-col items-end gap-2">
                   <button
                     onClick={connected ? openAccountModal : openConnectModal}
                     className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-full transition-all text-[9px] font-black uppercase tracking-[0.2em] h-full",
-                      connected 
-                        ? "bg-black/5 text-black hover:bg-black/10" 
+                      "flex items-center gap-2 px-4 py-2 rounded-full transition-all text-[9px] font-black uppercase tracking-[0.2em] h-10",
+                      connected
+                        ? "bg-white text-black hover:bg-white/90 shadow-[0_0_40px_rgba(255,255,255,0.2)]"
                         : "bg-white text-black hover:bg-white/90 shadow-[0_0_30px_rgba(255,255,255,0.15)]"
                     )}
                   >
@@ -3863,6 +3878,7 @@ export default function App() {
                       <><Wallet size={12} /> Connect</>
                     )}
                   </button>
+                  {connected && <WalletBalanceDisplay />}
                 </div>
               );
             }}
