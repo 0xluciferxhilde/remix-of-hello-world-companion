@@ -1242,14 +1242,13 @@ const ERC20Form = ({ onDeployed }: any) => {
   const [txStatus, setTxStatus] = useState<"success" | "failed" | null>(null);
 
   const handleDeploy = async () => {
-    if (!name || !symbol || !supply) return alert("Fill all fields");
-    if (!address) return alert("Connect wallet first");
+    if (!name || !symbol || !supply) { showError("Please fill all fields"); return; }
+    if (!address) { showError("Connect wallet first"); return; }
 
     setLoading(true);
     setTxStatus(null);
     setTxHash(null);
 
-    // Capture daily points BEFORE deploy
     let dailyBefore = 0n;
     try {
       if (address) {
@@ -1268,43 +1267,38 @@ const ERC20Form = ({ onDeployed }: any) => {
       setTxHash(result.txHash);
       setTxStatus("success");
 
+      const ca = (result as any).contractAddress as string | undefined;
+
       try {
-        if (address && (result as any).contractAddress) {
-          const ca = (result as any).contractAddress as string;
+        if (address) {
           addNotif(address, {
             type: "deploy",
             title: "Token Deployed",
-            message: `${symbol} deployed at ${ca.slice(0,6)}...${ca.slice(-4)}`,
-          });
-        } else if (address) {
-          addNotif(address, {
-            type: "deploy",
-            title: "Token Deployed",
-            message: `${symbol} deployed successfully`,
+            message: ca ? `${symbol} deployed at ${ca.slice(0,6)}...${ca.slice(-4)}` : `${symbol} deployed successfully`,
           });
         }
       } catch { /* ignore */ }
 
-      // Wait 2s then re-fetch points and toast based on prior daily
       setTimeout(async () => {
-        try {
-          if (address) {
-            await readPoints(address); // refresh on-chain read
-          }
-        } catch { /* ignore */ }
-        try {
-          const { toast } = await import("sonner");
-          if (dailyBefore < 100n) {
-            toast.success("✅ Token deployed! +5 points earned");
-          } else {
-            toast.success("✅ Token deployed! (Daily cap reached — no points)");
-          }
-        } catch { /* ignore */ }
+        try { if (address) await readPoints(address); } catch { /* ignore */ }
+        refreshPoints();
+        const earned = dailyBefore < 100n;
+        const rows = [
+          { label: "BASE POINTS", value: earned ? "+5 PTS" : "DAILY CAP REACHED" },
+          { label: "CONTRACT", value: ca ? `${ca.slice(0,6)}...${ca.slice(-4)}` : "—" },
+          { label: "STATUS", value: "LIVE ON LITVM" },
+        ];
+        showSuccess({
+          title: "TOKEN DEPLOYED",
+          subtitle: "PROTOCOL VERIFICATION COMPLETE",
+          rows,
+        });
         onDeployed?.();
-      }, 2000);
+      }, 3000);
     } catch (err) {
       console.error("Deploy error:", err);
       setTxStatus("failed");
+      showError(errMsg(err));
     } finally {
       setLoading(false);
     }
