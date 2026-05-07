@@ -772,10 +772,12 @@ const NFTIcon = ({ label, color }: { label: string; color: string }) => (
   </div>
 );
 
+const NFT_IMAGE_BASE = "https://raw.githubusercontent.com/zorodas/friendly-greetings/main/public/nfts";
+
 const NFT_TIER_META = [
-  { nftType: 1 as const, name: "LitShard", rarity: "COMMON", label: "LS", color: "#888888", cost: 1000,  maxSupply: 9999, rewards: "0.0001 zkLTC + 10 USDC + 2 LDEX" },
-  { nftType: 2 as const, name: "LitCore",  rarity: "RARE",   label: "LC", color: "#F97316", cost: 5000,  maxSupply: 4999, rewards: "0.0005 zkLTC + 50 USDC + 10 LDEX" },
-  { nftType: 3 as const, name: "LitGod",   rarity: "EPIC",   label: "LG", color: "#a855f7", cost: 10000, maxSupply: 999,  rewards: "0.001 zkLTC + 100 USDC + 20 LDEX" },
+  { nftType: 1 as const, name: "LitShard", rarity: "COMMON", label: "LS", color: "#888888", image: `${NFT_IMAGE_BASE}/litshard.png`, cost: 1000,  maxSupply: 9999, rewards: "0.0001 zkLTC + 10 USDC + 2 LDEX" },
+  { nftType: 2 as const, name: "LitCore",  rarity: "RARE",   label: "LC", color: "#F97316", image: `${NFT_IMAGE_BASE}/litcore.png`,  cost: 5000,  maxSupply: 4999, rewards: "0.0005 zkLTC + 50 USDC + 10 LDEX" },
+  { nftType: 3 as const, name: "LitGod",   rarity: "EPIC",   label: "LG", color: "#a855f7", image: `${NFT_IMAGE_BASE}/litgod.png`,   cost: 10000, maxSupply: 999,  rewards: "0.001 zkLTC + 100 USDC + 20 LDEX" },
 ];
 
 // --- Page: NFTs ---
