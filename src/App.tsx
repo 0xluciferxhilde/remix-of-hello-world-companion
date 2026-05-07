@@ -2704,6 +2704,7 @@ const QuestsPage = () => {
             <div className="space-y-3">
               {items.map(q => {
                 const isDone = !!completed[q.id];
+                const hasVisited = !!visited[q.id];
                 return (
                   <Card key={q.id} className={cn(
                     "p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all",
@@ -2734,6 +2735,7 @@ const QuestsPage = () => {
                         href={q.url}
                         target="_blank"
                         rel="noreferrer"
+                        onClick={() => setVisited(prev => ({ ...prev, [q.id]: true }))}
                         className={cn(
                           "flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 px-5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
                           isDone
@@ -2743,18 +2745,20 @@ const QuestsPage = () => {
                       >
                         Go <ExternalLink size={11} />
                       </a>
-                      <button
-                        onClick={() => markDone(q.id)}
-                        disabled={isDone || busy === q.id || !isConnected}
-                        className={cn(
-                          "flex-1 md:flex-none px-5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
-                          isDone
-                            ? "bg-white/5 text-white/30 cursor-not-allowed"
-                            : "bg-white text-black hover:opacity-90 disabled:opacity-40"
-                        )}
-                      >
-                        {isDone ? "Completed" : busy === q.id ? "Saving…" : "Mark Done"}
-                      </button>
+                      {(hasVisited || isDone) && (
+                        <button
+                          onClick={() => markDone(q.id)}
+                          disabled={isDone || busy === q.id || !isConnected}
+                          className={cn(
+                            "flex-1 md:flex-none px-5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
+                            isDone
+                              ? "bg-white/10 text-white/30 cursor-not-allowed"
+                              : "bg-white text-black hover:opacity-90 disabled:opacity-40"
+                          )}
+                        >
+                          {isDone ? "Completed" : busy === q.id ? "Saving…" : "Complete"}
+                        </button>
+                      )}
                     </div>
                   </Card>
                 );
