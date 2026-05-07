@@ -3530,7 +3530,7 @@ const WalletBalanceDisplay = () => {
   });
 
   return (
-    <div className="px-3 py-1 text-[11px] font-black text-black tracking-widest uppercase border-r border-black/5 mr-1 flex items-center h-full">
+    <div className="px-4 py-1.5 text-[10px] font-black text-black tracking-widest uppercase rounded-full bg-white shadow-[0_0_30px_rgba(255,255,255,0.15)]">
       {formatted} {balanceData.symbol}
     </div>
   );
