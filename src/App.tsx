@@ -3831,6 +3831,43 @@ export default function App() {
         </div>
       </div>
 
+      {/* Theme Toggle — below LD logo */}
+      <div className="fixed top-24 left-8 z-50 flex justify-center" style={{ width: '48px' }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleTheme(); }}
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          aria-label="Toggle theme"
+          className="h-9 px-3 rounded-full border border-brand-border bg-brand-surface text-brand-text-primary flex items-center justify-center gap-1.5 hover:bg-brand-surface-2 transition-all duration-300 shadow-lg backdrop-blur-xl"
+          style={{ transition: 'all 0.3s ease' }}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            {theme === 'dark' ? (
+              <motion.span
+                key="moon"
+                initial={{ rotate: -90, opacity: 0, scale: 0.6 }}
+                animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                exit={{ rotate: 90, opacity: 0, scale: 0.6 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="flex"
+              >
+                <Moon size={16} />
+              </motion.span>
+            ) : (
+              <motion.span
+                key="sun"
+                initial={{ rotate: -90, opacity: 0, scale: 0.6 }}
+                animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                exit={{ rotate: 90, opacity: 0, scale: 0.6 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="flex"
+              >
+                <Sun size={16} />
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </button>
+      </div>
+
       <div className="flex-1 relative flex flex-col">
         {/* Floating Tools Layout Fix */}
         <div className="sticky top-[calc(100vh-100px)] z-40 h-0 w-full px-8 pointer-events-none flex justify-between items-end">
