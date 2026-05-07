@@ -3057,7 +3057,7 @@ const MessengerPage = () => {
                            className="flex flex-col gap-2"
                          >
                            <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl relative group hover:bg-white/[0.08] transition-all">
-                              <p className="text-sm font-medium text-white/90 leading-relaxed mb-6">{m.content}</p>
+                              <p className="text-sm font-medium text-white/90 leading-relaxed mb-6 break-all w-full">{m.content}</p>
                               
                               <div className="pt-4 border-t border-white/5 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
