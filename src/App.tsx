@@ -3835,19 +3835,18 @@ export default function App() {
         </div>
 
         {/* Top Right Tools (Kept Fixed/Top for now as it doesn't collide with footer) */}
-        <div className="fixed top-8 right-8 z-50 hidden lg:flex items-center gap-3">
+        <div className="fixed top-8 right-8 z-50 hidden lg:flex flex-col items-end gap-2" style={{ transform: 'scale(0.85)', transformOrigin: 'top right' }}>
           <ConnectButton.Custom>
             {({ account, chain, openConnectModal, openAccountModal, mounted }) => {
               const connected = mounted && account && chain;
               return (
-                <div className={cn("flex items-center gap-1 bg-white rounded-full p-1 h-10 shadow-[0_0_40px_rgba(255,255,255,0.2)]", !connected && "bg-transparent shadow-none p-0")}>
-                  {connected && <WalletBalanceDisplay />}
+                <div className="flex flex-col items-end gap-2">
                   <button
                     onClick={connected ? openAccountModal : openConnectModal}
                     className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-full transition-all text-[9px] font-black uppercase tracking-[0.2em] h-full",
-                      connected 
-                        ? "bg-black/5 text-black hover:bg-black/10" 
+                      "flex items-center gap-2 px-4 py-2 rounded-full transition-all text-[9px] font-black uppercase tracking-[0.2em] h-10",
+                      connected
+                        ? "bg-white text-black hover:bg-white/90 shadow-[0_0_40px_rgba(255,255,255,0.2)]"
                         : "bg-white text-black hover:bg-white/90 shadow-[0_0_30px_rgba(255,255,255,0.15)]"
                     )}
                   >
@@ -3860,6 +3859,7 @@ export default function App() {
                       <><Wallet size={12} /> Connect</>
                     )}
                   </button>
+                  {connected && <WalletBalanceDisplay />}
                 </div>
               );
             }}
