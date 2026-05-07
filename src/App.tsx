@@ -3519,7 +3519,7 @@ export default function App() {
             {/* Bottom Left Tools */}
             <div className="hidden lg:flex items-center pointer-events-auto">
               <button 
-                onClick={() => setActivePage('faucet')}
+                onClick={handleFaucetClick}
                 className="group flex items-center gap-3 px-8 py-4 rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-xs font-bold uppercase tracking-[0.2em] text-white/80 backdrop-blur-3xl shadow-2xl"
               >
                 <Droplets size={16} className="group-hover:text-white transition-colors" />
@@ -3537,19 +3537,20 @@ export default function App() {
                 )}
               >
                 <CalendarCheck size={24} className={cn("transition-colors", activePage === 'checkin' ? "text-white" : "group-hover:text-white")} />
+                <span className={cn(
+                  "absolute top-1 right-1 w-2 h-2 rounded-full",
+                  hasCheckedInToday ? "bg-white" : "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]"
+                )} />
               </button>
               <button
                 onClick={() => setNotifOpen(o => !o)}
                 className="relative w-16 h-16 flex items-center justify-center rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-white/60 backdrop-blur-3xl shadow-2xl group"
               >
                 <Bell size={24} className="group-hover:text-white transition-colors" />
-                {unreadCount > 0 && (
-                  unreadCount > 9 ? (
-                    <div className="absolute top-3 right-3 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-brand-bg">9+</div>
-                  ) : (
-                    <div className="absolute top-4 right-4 w-2.5 h-2.5 bg-red-500 rounded-full ring-4 ring-brand-bg shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
-                  )
-                )}
+                <span className={cn(
+                  "absolute top-1 right-1 w-2 h-2 rounded-full",
+                  hasNewNotif ? "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" : "bg-white"
+                )} />
               </button>
             </div>
         </div>
