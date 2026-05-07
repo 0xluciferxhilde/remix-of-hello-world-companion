@@ -3537,6 +3537,8 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      <NotificationsPanel open={notifOpen} onClose={() => setNotifOpen(false)} wallet={walletAddr} />
     </div>
   );
 }
