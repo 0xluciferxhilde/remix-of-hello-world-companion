@@ -1461,7 +1461,7 @@ const ERC20Form = ({ onDeployed }: any) => {
             </button>
 
             <div className="text-center space-y-2">
-              <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">0.05 zkLTC fee per deploy</p>
+              <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">Free deployment</p>
               <div className="flex items-center justify-center gap-2 text-white/50">
                 <Sparkles size={12} />
                 <span className="text-[9px] font-bold uppercase tracking-widest">+5 points earned automatically (10/100 today)</span>
