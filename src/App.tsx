@@ -762,86 +762,211 @@ const CheckinPage = () => {
 };
 
 
+// --- NFT Icon (animated rotating ring) ---
+const NFTIcon = ({ label, color }: { label: string; color: string }) => (
+  <div className="relative w-full aspect-square flex items-center justify-center">
+    <div className="absolute inset-[12%] rounded-full nft-spin" style={{ background: `conic-gradient(from 0deg, ${color}, transparent 60%, ${color})`, opacity: 0.85 }} />
+    <div className="absolute inset-[18%] rounded-full bg-brand-bg flex items-center justify-center border border-white/10">
+      <span className="text-2xl font-black tracking-tighter" style={{ color }}>{label}</span>
+    </div>
+  </div>
+);
+
+const NFT_TIER_META = [
+  { nftType: 1 as const, name: "LitShard", rarity: "COMMON", label: "LS", color: "#888888", cost: 1000,  maxSupply: 9999, rewards: "0.0001 zkLTC + 10 USDC + 2 LDEX" },
+  { nftType: 2 as const, name: "LitCore",  rarity: "RARE",   label: "LC", color: "#F97316", cost: 5000,  maxSupply: 4999, rewards: "0.0005 zkLTC + 50 USDC + 10 LDEX" },
+  { nftType: 3 as const, name: "LitGod",   rarity: "EPIC",   label: "LG", color: "#a855f7", cost: 10000, maxSupply: 999,  rewards: "0.001 zkLTC + 100 USDC + 20 LDEX" },
+];
+
 // --- Page: NFTs ---
 const NFTsPage = () => {
   const { address, isConnected } = useAccount();
-  const [nfts, setNfts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [userNFTs, setUserNFTs] = useState<{ nftType: number }[]>([]);
+  const [minted, setMinted] = useState<Record<number, number>>({ 1: 0, 2: 0, 3: 0 });
+  const [pending, setPending] = useState<{ zkltc: bigint; usdc: bigint; ldex: bigint }>({ zkltc: 0n, usdc: 0n, ldex: 0n });
+  const [totalPoints, setTotalPoints] = useState<bigint>(0n);
   const [claiming, setClaiming] = useState(false);
+  const [mintingType, setMintingType] = useState<number | null>(null);
 
-  const fetchData = async () => {
-    if (!address) return;
-    setLoading(true);
+  const fetchAll = async () => {
     try {
-      const { readUserNFTs } = await import('./lib/litdex-core-logic');
-      const data = await readUserNFTs(address);
-      setNfts(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+      const lib = await import('./lib/litdex-core-logic');
+      const [m1, m2, m3] = await Promise.all([
+        lib.readNFTTotalMinted(1), lib.readNFTTotalMinted(2), lib.readNFTTotalMinted(3),
+      ]);
+      setMinted({ 1: m1, 2: m2, 3: m3 });
+      if (address) {
+        const [list, pend, pts] = await Promise.all([
+          lib.readUserNFTs(address),
+          lib.readNFTPending(address),
+          lib.readPoints(address).then(p => p.total).catch(() => 0n),
+        ]);
+        setUserNFTs(list);
+        setPending(pend);
+        setTotalPoints(pts);
+      }
+    } catch (e) { console.error(e); }
   };
 
-  useEffect(() => {
-    if (isConnected && address) {
-      fetchData();
+  useEffect(() => { fetchAll(); }, [address, isConnected]);
+
+  const handleMint = async (nftType: 1 | 2 | 3) => {
+    if (!address) return;
+    const tier = NFT_TIER_META.find(t => t.nftType === nftType)!;
+    if (totalPoints < BigInt(tier.cost)) { addNotif(address, { type: "nft", title: "Not enough points", message: `Need ${tier.cost} pts` }); return; }
+    setMintingType(nftType);
+    try {
+      const lib = await import('./lib/litdex-core-logic');
+      try { await lib.setNFTUserPoints(address, totalPoints); } catch (e) { console.warn("setUserPoints failed", e); }
+      await lib.mintRewardNFT(nftType);
+      addNotif(address, { type: "nft", title: "+NFT minted!", message: `${tier.name} minted successfully` });
+      await fetchAll();
+    } catch (err: any) {
+      addNotif(address, { type: "nft", title: "Mint failed", message: err?.message?.slice(0, 80) || "Transaction reverted" });
+    } finally {
+      setMintingType(null);
     }
-  }, [isConnected, address]);
+  };
 
   const handleClaimRewards = async () => {
     if (!address) return;
     setClaiming(true);
     try {
-      const { claimNFTRewards } = await import('./lib/litdex-core-logic');
-      await claimNFTRewards();
-      alert("Rewards claimed!");
+      const lib = await import('./lib/litdex-core-logic');
+      await lib.claimNFTRewards();
+      addNotif(address, { type: "nft", title: "Rewards claimed", message: "Daily rewards sent to your wallet" });
+      await fetchAll();
     } catch (err: any) {
-      alert(`Claim failed: ${err.message || err.toString()}`);
+      addNotif(address, { type: "nft", title: "Claim failed", message: err?.message?.slice(0, 80) || "Transaction reverted" });
     } finally {
       setClaiming(false);
     }
   };
 
+  const hasPending = pending.zkltc > 0n || pending.usdc > 0n || pending.ldex > 0n;
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-12 container mx-auto px-4">
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-8 mb-12 flex flex-col md:flex-row items-center justify-between gap-8">
-        <div>
-          <h2 className="text-2xl font-bold mb-2 flex items-center gap-2 text-white">
-            <Sparkles size={24} /> Genesis Metadata Rewards
-          </h2>
-          <p className="text-brand-text-muted text-sm max-w-md leading-relaxed">
-            Holders of Genesis NFTs receive daily claimable rewards and exclusive access.
-          </p>
-        </div>
-        <button 
-          onClick={handleClaimRewards}
-          disabled={!isConnected || claiming}
-          className="whitespace-nowrap px-8 py-3 bg-white text-black rounded-xl font-bold shadow-[0_0_24px_rgba(255,255,255,0.1)] hover:scale-[1.02] transition-all uppercase text-xs tracking-widest disabled:opacity-50"
-        >
-          {claiming ? "Claiming..." : "Claim Daily Rewards"}
-        </button>
+      <div className="mb-10">
+        <h1 className="text-3xl md:text-4xl font-bold tracking-tighter mb-2">Genesis NFTs</h1>
+        <p className="text-brand-text-muted text-sm max-w-xl">Mint Genesis NFTs with your points and earn daily zkLTC, USDC and LDEX rewards.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {nfts.length === 0 ? (
-          <div className="col-span-full text-center py-20 bg-white/5 rounded-3xl border border-dashed border-white/10">
-             <p className="text-brand-text-muted font-bold text-sm uppercase tracking-widest">No NFTs found in this wallet</p>
+      {hasPending && (
+        <div className="mb-10 rounded-2xl border border-white/10 bg-gradient-to-r from-white/[0.04] to-white/[0.01] p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+              <Sparkles size={20} className="text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-text-muted mb-1">Genesis Metadata Rewards</p>
+              <p className="text-base font-bold tabular-nums">
+                {Number(formatEther(pending.zkltc)).toFixed(4)} zkLTC + {Number(formatEther(pending.usdc)).toFixed(2)} USDC + {Number(formatEther(pending.ldex)).toFixed(2)} LDEX
+              </p>
+            </div>
           </div>
-        ) : nfts.map((nft, i) => (
-          <Card key={i} className="overflow-hidden group hover:border-white/30 transition-all">
-            <div className="aspect-square bg-brand-surface-2 relative flex items-center justify-center overflow-hidden">
-               <img src={nft.image} alt={nft.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" referrerPolicy="no-referrer" />
-               <div className="absolute top-4 right-4 px-2 py-1 rounded-md bg-brand-bg/80 backdrop-blur-md border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white">
-                ID #{nft.tokenId}
+          <button onClick={handleClaimRewards} disabled={!isConnected || claiming}
+            className="whitespace-nowrap px-6 py-3 bg-white text-black rounded-xl font-bold uppercase text-xs tracking-widest hover:scale-[1.02] transition-all disabled:opacity-40">
+            {claiming ? "Claiming..." : "Claim Daily Rewards"}
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {NFT_TIER_META.map(tier => {
+          const m = minted[tier.nftType] || 0;
+          const pct = Math.min(100, (m / tier.maxSupply) * 100);
+          const soldOut = m >= tier.maxSupply;
+          const notEnough = totalPoints < BigInt(tier.cost);
+          const minting = mintingType === tier.nftType;
+          return (
+            <div key={tier.nftType} className="rounded-2xl border border-white/10 bg-brand-surface overflow-hidden hover:border-white/20 transition-all">
+              <div className="relative aspect-square bg-brand-surface-2 p-6">
+                <div className="absolute top-4 right-4 px-2 py-1 rounded-md bg-brand-bg/80 backdrop-blur-md border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white z-10">
+                  {tier.rarity}
+                </div>
+                <NFTIcon label={tier.label} color={tier.color} />
+              </div>
+              <div className="p-5 space-y-4">
+                <div>
+                  <h3 className="text-lg font-bold">{tier.name}</h3>
+                  <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">LitDeX Genesis</p>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest mb-1.5">
+                    <span className="text-brand-text-muted">Minted</span>
+                    <span className="text-white tabular-nums">{m.toLocaleString()} / {tier.maxSupply.toLocaleString()}</span>
+                  </div>
+                  <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-full bg-white rounded-full transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-text-muted mb-1">Daily Rewards</p>
+                  <p className="text-xs font-semibold tabular-nums">{tier.rewards}</p>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-brand-text-muted">Mint Cost</span>
+                  <span className="text-sm font-bold tabular-nums">{tier.cost.toLocaleString()} pts</span>
+                </div>
+
+                {notEnough && (
+                  <div className="text-[10px] text-red-400/80 text-center">
+                    You have {totalPoints.toString()} / {tier.cost.toLocaleString()} pts
+                  </div>
+                )}
+
+                <button onClick={() => handleMint(tier.nftType)}
+                  disabled={!isConnected || notEnough || soldOut || minting}
+                  className="w-full mt-1 py-2.5 rounded-xl bg-white text-black text-xs font-bold uppercase tracking-widest hover:bg-white/90 transition-all disabled:opacity-25 disabled:cursor-not-allowed">
+                  {soldOut ? "Sold Out" : minting ? "Minting..." : `Mint ${tier.name}`}
+                </button>
               </div>
             </div>
-            <div className="p-5">
-              <h3 className="font-bold mb-1">{nft.name}</h3>
-              <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">{nft.description}</p>
-            </div>
-          </Card>
-        ))}
+          );
+        })}
+      </div>
+
+      <div className="mt-16">
+        <div className="flex items-baseline justify-between mb-6">
+          <h2 className="text-2xl font-bold tracking-tighter">Your NFTs</h2>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-text-muted">Your Collection</p>
+        </div>
+        {userNFTs.length === 0 ? (
+          <div className="text-center py-16 bg-white/[0.02] rounded-2xl border border-dashed border-white/10">
+            <p className="text-brand-text-muted font-bold text-sm uppercase tracking-widest">No NFTs minted yet</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {userNFTs.map((nft, i) => {
+              const info = NFT_TIER_META.find(t => t.nftType === nft.nftType) || NFT_TIER_META[0];
+              return (
+                <div key={i} className="rounded-2xl border border-white/10 bg-brand-surface overflow-hidden">
+                  <div className="relative aspect-square bg-brand-surface-2 p-6">
+                    <div className="absolute top-4 right-4 px-2 py-1 rounded-md bg-brand-bg/80 backdrop-blur-md border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white z-10">
+                      {info.rarity}
+                    </div>
+                    <NFTIcon label={info.label} color={info.color} />
+                  </div>
+                  <div className="p-4">
+                    <h3 className="font-bold">{info.name}</h3>
+                    <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest mb-3">LitDeX Genesis</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">Owned</p>
+                      <div className="flex items-center gap-1 text-emerald-400">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">Earning</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </motion.div>
   );
