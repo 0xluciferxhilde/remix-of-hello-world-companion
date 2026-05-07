@@ -2579,77 +2579,174 @@ contract LitVMTokenFactory is Ownable {
     </div>
   );
 };
-// --- Page: Quests ---
+// --- Page: Quests / Socials ---
 const QuestsPage = () => {
   const { address, isConnected } = useAccount();
-  const [quests, setQuests] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [completed, setCompleted] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [QUESTS_LIST, setQuestsList] = useState<any[]>([]);
 
-  const fetchData = async () => {
-    if (!address) return;
-    setLoading(true);
-    try {
-      const { readQuests } = await import('./lib/litdex-core-logic');
-      const data = await readQuests(address);
-      setQuests(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const cacheKey = address ? `litdex_quests_${address.toLowerCase()}` : null;
 
+  // Load static QUESTS list from logic module
   useEffect(() => {
-    if (isConnected && address) {
-      fetchData();
-    }
-  }, [isConnected, address]);
+    (async () => {
+      const mod = await import('./lib/litdex-core-logic');
+      setQuestsList(mod.QUESTS || []);
+    })();
+  }, []);
 
-  const handleVerify = async (questId: string) => {
+  // Load cache first, then verify with API in background
+  useEffect(() => {
+    if (!address || !cacheKey) return;
     try {
-      const { verifyQuest } = await import('./lib/litdex-core-logic');
-      await verifyQuest(questId);
-      alert("Quest verified!");
-      fetchData();
-    } catch (err: any) {
-      alert(`Verification failed: ${err.message}`);
+      const raw = localStorage.getItem(cacheKey);
+      if (raw) setCompleted(JSON.parse(raw));
+    } catch { /* ignore */ }
+
+    (async () => {
+      try {
+        const { questApi } = await import('./lib/litdex-core-logic');
+        const status = await questApi.getStatus(address);
+        setCompleted(prev => {
+          // Never reset: keep any locally-completed true
+          const merged: Record<string, boolean> = { ...prev };
+          Object.keys(status).forEach(k => { if (status[k]) merged[k] = true; });
+          try { localStorage.setItem(cacheKey, JSON.stringify(merged)); } catch { /* ignore */ }
+          return merged;
+        });
+      } catch (e) { console.error(e); }
+    })();
+  }, [address, cacheKey]);
+
+  const markDone = async (questId: string) => {
+    if (!address || completed[questId]) return;
+    setBusy(questId);
+    try {
+      const { questApi } = await import('./lib/litdex-core-logic');
+      try { await questApi.complete(address, questId); } catch { /* tolerate */ }
+      setCompleted(prev => {
+        const next = { ...prev, [questId]: true };
+        if (cacheKey) {
+          try { localStorage.setItem(cacheKey, JSON.stringify(next)); } catch { /* ignore */ }
+        }
+        return next;
+      });
+    } finally {
+      setBusy(null);
     }
   };
+
+  const groups: { key: string; title: string; subtitle: string }[] = [
+    { key: 'follow', title: 'X Follows',  subtitle: '100 pts each' },
+    { key: 'like',   title: 'Like & Retweet', subtitle: '10 pts each' },
+    { key: 'tg',     title: 'Telegram',   subtitle: '50 pts each' },
+  ];
+
+  const totalEarned = QUESTS_LIST.reduce((acc, q) => acc + (completed[q.id] ? q.pts : 0), 0);
+  const totalPossible = QUESTS_LIST.reduce((acc, q) => acc + q.pts, 0);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-12 max-w-4xl mx-auto px-4">
-      <h1 className="text-3xl font-bold mb-8 text-white tracking-tighter">Tasks & Quests</h1>
-      <div className="space-y-4">
-        {quests.length === 0 ? (
-          <div className="p-12 text-center bg-white/5 border border-dashed border-white/10 rounded-2xl">
-             <p className="text-brand-text-muted uppercase text-xs font-bold tracking-widest">Connect wallet to view quests</p>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-10">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white">
+            <ListChecks size={14} />
           </div>
-        ) : quests.map((q, i) => (
-          <Card key={i} className="p-6 flex flex-col md:flex-row items-center justify-between hover:bg-white/[0.02] transition-all border-white/5 bg-black/20">
-            <div className="flex items-center gap-4 mb-4 md:mb-0">
-               <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-2xl">
-                 {q.type === 'social' ? '𝕏' : '✨'}
-               </div>
-               <div>
-                  <h3 className="font-bold text-white">{q.name}</h3>
-                  <p className="text-xs text-brand-text-muted">{q.points.toString()} Points Reward</p>
-               </div>
+          <div>
+            <h1 className="text-xs font-bold uppercase tracking-[0.3em] text-white">Socials & Quests</h1>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="w-1 h-1 rounded-full bg-white/40 animate-pulse" />
+              <span className="text-[10px] text-brand-text-muted font-medium uppercase tracking-widest">Earn LitDeX Points</span>
             </div>
-            <div className="flex items-center gap-4 w-full md:w-auto">
-               <button 
-                onClick={() => handleVerify(q.id)}
-                disabled={q.completed}
-                className={cn(
-                  "flex-1 md:flex-none px-8 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all",
-                  q.completed ? "bg-white/5 text-white/20 border border-white/5" : "bg-white text-black hover:opacity-90"
-                )}
-               >
-                 {q.completed ? "Completed" : "Verify"}
-               </button>
-            </div>
-          </Card>
-        ))}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-[9px] uppercase tracking-widest text-brand-text-muted">Earned</div>
+          <div className="font-mono text-white text-xl font-bold">{totalEarned}<span className="text-brand-text-muted text-xs"> / {totalPossible}</span></div>
+        </div>
       </div>
+
+      {!isConnected && (
+        <div className="p-12 text-center bg-white/5 border border-dashed border-white/10 rounded-2xl mb-10">
+          <p className="text-brand-text-muted uppercase text-xs font-bold tracking-widest">Connect wallet to track your quest progress</p>
+        </div>
+      )}
+
+      {groups.map(group => {
+        const items = QUESTS_LIST.filter(q => q.group === group.key);
+        if (!items.length) return null;
+        return (
+          <div key={group.key} className="mb-10">
+            <div className="flex items-end justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-white tracking-tight">{group.title}</h2>
+                <p className="text-[10px] text-brand-text-muted uppercase tracking-widest">{group.subtitle}</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {items.map(q => {
+                const isDone = !!completed[q.id];
+                return (
+                  <Card key={q.id} className={cn(
+                    "p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all",
+                    isDone ? "bg-white/[0.02] border-white/5 opacity-60" : "bg-black/20 border-white/5 hover:bg-white/[0.03]"
+                  )}>
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className={cn(
+                        "w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0 border",
+                        isDone ? "bg-white/[0.02] border-white/5 text-white/30" : "bg-white/5 border-white/10 text-white"
+                      )}>
+                        {q.icon === 'tg' ? '✈' : '𝕏'}
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className={cn("font-semibold truncate", isDone ? "text-white/40" : "text-white")}>{q.title}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={cn(
+                            "text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border",
+                            isDone ? "border-white/5 text-white/30" : "border-white/15 text-white bg-white/5"
+                          )}>
+                            +{q.pts} pts
+                          </span>
+                          <span className="text-[10px] text-brand-text-muted uppercase tracking-widest">{group.title}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                      <a
+                        href={q.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={cn(
+                          "flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 px-5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
+                          isDone
+                            ? "border-white/5 text-white/30 pointer-events-none"
+                            : "border-white/15 text-white hover:bg-white/10"
+                        )}
+                      >
+                        Go <ExternalLink size={11} />
+                      </a>
+                      <button
+                        onClick={() => markDone(q.id)}
+                        disabled={isDone || busy === q.id || !isConnected}
+                        className={cn(
+                          "flex-1 md:flex-none px-5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
+                          isDone
+                            ? "bg-white/5 text-white/30 cursor-not-allowed"
+                            : "bg-white text-black hover:opacity-90 disabled:opacity-40"
+                        )}
+                      >
+                        {isDone ? "Completed" : busy === q.id ? "Saving…" : "Mark Done"}
+                      </button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </motion.div>
   );
 };
