@@ -3460,7 +3460,6 @@ export default function App() {
         </div>
         <div className="flex flex-col -gap-1">
           <span className="text-2xl sm:text-3xl font-black tracking-tighter text-white leading-none italic group-hover:tracking-normal transition-all duration-700">LitDeX</span>
-          <span className="hidden sm:block text-[9px] font-bold tracking-[0.6em] text-white/50 uppercase leading-none mt-1.5 transition-all group-hover:text-white">Mainnet</span>
         </div>
       </div>
 
