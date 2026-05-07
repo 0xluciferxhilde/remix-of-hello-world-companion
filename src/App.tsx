@@ -47,6 +47,7 @@ import { formatEther, parseEther, formatUnits, parseUnits } from 'ethers';
 import SwapCard from './components/ui/crypto-swap-card';
 import { AnimatedNavFramer } from './components/ui/navigation-menu';
 import { litvmChain, errMsg, LITDEX_DEPLOYER_ADDRESS, readTotalDeployed, deployTokenLitDeX, shortAddr, readDeployments, readDeployFee, readLegacyDeployFee, deployTokenLegacy, getLegacyTokenInfo, getLegacyTokensByCreator, getLegacyTotalDeployedDisplay, readPoints, readCheckinInfo, readCurrentDay, checkinToday } from './lib/litdex-core-logic';
+import { showSuccess, showError, showInfo, refreshPoints } from './lib/feedback';
 
 // --- Types ---
 type PageID = 'swap' | 'pool' | 'deploy' | 'points' | 'checkin' | 'nfts' | 'messenger' | 'quests' | 'games' | 'faucet';
@@ -140,23 +141,28 @@ const PointsPage = ({ setPage }: { setPage: (p: PageID) => void }) => {
   const [timeLeft, setTimeLeft] = useState("00:00:00");
   const [previousPage, setPreviousPage] = useState<PageID>('swap');
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!address) return;
-      setLoading(true);
-      try {
-        const p = await readPoints(address);
-        setPointsData({ total: BigInt(p.total), daily: BigInt(p.daily) });
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (isConnected && address) {
-      fetchData();
+  const fetchPoints = React.useCallback(async () => {
+    if (!address) return;
+    setLoading(true);
+    try {
+      const p = await readPoints(address);
+      setPointsData({ total: BigInt(p.total), daily: BigInt(p.daily) });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  }, [isConnected, address]);
+  }, [address]);
+
+  useEffect(() => {
+    if (isConnected && address) fetchPoints();
+  }, [isConnected, address, fetchPoints]);
+
+  useEffect(() => {
+    const onRefresh = () => fetchPoints();
+    window.addEventListener("litdex:points-refresh", onRefresh);
+    return () => window.removeEventListener("litdex:points-refresh", onRefresh);
+  }, [fetchPoints]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -470,18 +476,14 @@ const CheckinPage = () => {
     setCheckinError(null);
     try {
       const hash = await checkinToday();
-      alert("Txn check-in successful check txn hash");
       const newInfo = await readCheckinInfo(address);
       
       const ldexVal = formatEther(newInfo.nextLDEX);
       
       let zkLTCBonus = "";
       const now = new Date();
-      // IST is UTC+5.5. So 18:30 UTC is 00:00 IST.
-      // JS Date getUTCDay() for 18:30+ UTC might be different.
-      // Let's use IST day.
       const istDate = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
-      if (istDate.getUTCDay() === 0) { // Sunday
+      if (istDate.getUTCDay() === 0) {
         const dayOfMonth = istDate.getUTCDate();
         const week = Math.ceil(dayOfMonth / 7);
         if (week === 1) zkLTCBonus = "0.001";
@@ -496,6 +498,19 @@ const CheckinPage = () => {
         zkLTC: zkLTCBonus || undefined,
         hash
       });
+
+      const rows: { label: string; value: string }[] = [
+        { label: "BASE POINTS", value: "+10 PTS" },
+        { label: "INCENTIVE YIELD", value: `+${Number(ldexVal).toLocaleString()} LDEX` },
+      ];
+      if (zkLTCBonus) rows.push({ label: "SUNDAY BONUS", value: `+${zkLTCBonus} zkLTC 🎁` });
+      rows.push({ label: "STREAK", value: `Day ${Number(newInfo.streak)}` });
+      showSuccess({
+        title: "MISSION SUCCESS",
+        subtitle: "PROTOCOL VERIFICATION COMPLETE",
+        rows,
+      });
+      refreshPoints();
 
       try {
         if (address) {
@@ -720,43 +735,6 @@ const CheckinPage = () => {
       </Card>
       </div>
 
-      {/* Floating Success Notification */}
-      <AnimatePresence>
-        {successMsg && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="fixed bottom-10 right-10 z-50 bg-white text-black p-8 rounded-3xl shadow-[0_30px_100px_rgba(255,255,255,0.2)] max-w-sm border-4 border-black/5"
-          >
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-black/5 flex items-center justify-center">
-                <Trophy size={24} />
-              </div>
-              <div>
-                <div className="font-black uppercase tracking-tighter text-lg">Mission Success</div>
-                <div className="text-[9px] font-bold uppercase tracking-widest opacity-40">Protocol Verification Complete</div>
-              </div>
-            </div>
-            <div className="space-y-3 pt-4 border-t border-black/5">
-              <div className="flex justify-between items-center text-xs font-bold">
-                <span className="opacity-40 uppercase tracking-widest">Base Points</span>
-                <span>+{successMsg.pts} PTS</span>
-              </div>
-              <div className="flex justify-between items-center text-xs font-bold">
-                <span className="opacity-40 uppercase tracking-widest">Incentive Yield</span>
-                <span>+{Number(successMsg.ldex).toLocaleString()} LDEX</span>
-              </div>
-              {successMsg.zkLTC && (
-                <div className="flex justify-between items-center text-xs font-bold text-emerald-600">
-                  <span className="opacity-40 uppercase tracking-widest">Sunday Bonus</span>
-                  <span>+{successMsg.zkLTC} zkLTC 🎁</span>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
@@ -832,16 +810,31 @@ const NFTsPage = () => {
   const handleMint = async (nftType: 1 | 2 | 3) => {
     if (!address) return;
     const tier = NFT_TIER_META.find(t => t.nftType === nftType)!;
-    if (totalPoints < BigInt(tier.cost)) { addNotif(address, { type: "nft", title: "Not enough points", message: `Need ${tier.cost} pts` }); return; }
+    if (totalPoints < BigInt(tier.cost)) {
+      addNotif(address, { type: "nft", title: "Not enough points", message: `Need ${tier.cost} pts` });
+      showError(`Not enough points — need ${tier.cost} pts`);
+      return;
+    }
     setMintingType(nftType);
     try {
       const lib = await import('./lib/litdex-core-logic');
       try { await lib.setNFTUserPoints(address, totalPoints); } catch (e) { console.warn("setUserPoints failed", e); }
       await lib.mintRewardNFT(nftType);
       addNotif(address, { type: "nft", title: "+NFT minted!", message: `${tier.name} minted successfully` });
+      showSuccess({
+        title: "NFT MINTED",
+        subtitle: "PROTOCOL VERIFICATION COMPLETE",
+        rows: [
+          { label: "NFT TYPE", value: tier.name },
+          { label: "POINTS USED", value: `-${tier.cost.toLocaleString()} PTS` },
+          { label: "DAILY REWARD", value: tier.rewards },
+        ],
+      });
+      refreshPoints();
       await fetchAll();
     } catch (err: any) {
       addNotif(address, { type: "nft", title: "Mint failed", message: err?.message?.slice(0, 80) || "Transaction reverted" });
+      showError(errMsg(err));
     } finally {
       setMintingType(null);
     }
@@ -1064,7 +1057,7 @@ const DeployPage = () => {
             <button 
               onClick={() => {
                 navigator.clipboard.writeText(LITDEX_DEPLOYER_ADDRESS);
-                alert("Copied!");
+                showInfo("Copied to clipboard");
               }}
               className="p-1.5 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10"
             >
@@ -1236,14 +1229,13 @@ const ERC20Form = ({ onDeployed }: any) => {
   const [txStatus, setTxStatus] = useState<"success" | "failed" | null>(null);
 
   const handleDeploy = async () => {
-    if (!name || !symbol || !supply) return alert("Fill all fields");
-    if (!address) return alert("Connect wallet first");
+    if (!name || !symbol || !supply) { showError("Please fill all fields"); return; }
+    if (!address) { showError("Connect wallet first"); return; }
 
     setLoading(true);
     setTxStatus(null);
     setTxHash(null);
 
-    // Capture daily points BEFORE deploy
     let dailyBefore = 0n;
     try {
       if (address) {
@@ -1262,43 +1254,38 @@ const ERC20Form = ({ onDeployed }: any) => {
       setTxHash(result.txHash);
       setTxStatus("success");
 
+      const ca = (result as any).contractAddress as string | undefined;
+
       try {
-        if (address && (result as any).contractAddress) {
-          const ca = (result as any).contractAddress as string;
+        if (address) {
           addNotif(address, {
             type: "deploy",
             title: "Token Deployed",
-            message: `${symbol} deployed at ${ca.slice(0,6)}...${ca.slice(-4)}`,
-          });
-        } else if (address) {
-          addNotif(address, {
-            type: "deploy",
-            title: "Token Deployed",
-            message: `${symbol} deployed successfully`,
+            message: ca ? `${symbol} deployed at ${ca.slice(0,6)}...${ca.slice(-4)}` : `${symbol} deployed successfully`,
           });
         }
       } catch { /* ignore */ }
 
-      // Wait 2s then re-fetch points and toast based on prior daily
       setTimeout(async () => {
-        try {
-          if (address) {
-            await readPoints(address); // refresh on-chain read
-          }
-        } catch { /* ignore */ }
-        try {
-          const { toast } = await import("sonner");
-          if (dailyBefore < 100n) {
-            toast.success("✅ Token deployed! +5 points earned");
-          } else {
-            toast.success("✅ Token deployed! (Daily cap reached — no points)");
-          }
-        } catch { /* ignore */ }
+        try { if (address) await readPoints(address); } catch { /* ignore */ }
+        refreshPoints();
+        const earned = dailyBefore < 100n;
+        const rows = [
+          { label: "BASE POINTS", value: earned ? "+5 PTS" : "DAILY CAP REACHED" },
+          { label: "CONTRACT", value: ca ? `${ca.slice(0,6)}...${ca.slice(-4)}` : "—" },
+          { label: "STATUS", value: "LIVE ON LITVM" },
+        ];
+        showSuccess({
+          title: "TOKEN DEPLOYED",
+          subtitle: "PROTOCOL VERIFICATION COMPLETE",
+          rows,
+        });
         onDeployed?.();
-      }, 2000);
+      }, 3000);
     } catch (err) {
       console.error("Deploy error:", err);
       setTxStatus("failed");
+      showError(errMsg(err));
     } finally {
       setLoading(false);
     }
@@ -1672,8 +1659,8 @@ contract MNFT is ERC721, Ownable {
   };
 
   const handleDeploy = async () => {
-    if (!name || !symbol || !maxSupply) return alert("Fill all fields");
-    if (!address) return alert("Connect wallet first");
+    if (!name || !symbol || !maxSupply) { showError("Please fill all fields"); return; }
+    if (!address) { showError("Connect wallet first"); return; }
 
     setLoading(true);
     setTxStatus(null);
@@ -1989,7 +1976,7 @@ contract MNFT is ERC721, Ownable {
                   <button 
                     onClick={() => {
                       navigator.clipboard.writeText(generateSource());
-                      alert("Source copied!");
+                      showInfo("Source copied to clipboard");
                     }}
                     className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white transition-all uppercase tracking-widest"
                   >
@@ -2134,7 +2121,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
   };
 
   const handleDeploy = async () => {
-    if (!stakingToken) return alert("Staking token required");
+    if (!stakingToken) { showError("Staking token required"); return; }
     setLoading(true);
     setTxInfo(null);
     try {
@@ -2151,7 +2138,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
       setTxInfo({ hash: res.txHash, address: res.contractAddress });
       onDeployed?.();
     } catch (err) {
-      alert(errMsg(err));
+      showError(errMsg(err));
     } finally {
       setLoading(false);
     }
@@ -2253,7 +2240,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
                   <button 
                     onClick={() => {
                       navigator.clipboard.writeText(generateSource());
-                      alert("Source copied!");
+                      showInfo("Source copied to clipboard");
                     }}
                     className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white transition-all uppercase tracking-widest"
                   >
@@ -2359,7 +2346,7 @@ contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGu
   };
 
   const handleDeploy = async () => {
-    if (!tokenAddress || !beneficiary || !amount) return alert("Required fields missing");
+    if (!tokenAddress || !beneficiary || !amount) { showError("Required fields missing"); return; }
     setLoading(true);
     setTxInfo(null);
     try {
@@ -2376,7 +2363,7 @@ contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGu
       setTxInfo({ hash: res.txHash, address: res.contractAddress });
       onDeployed?.();
     } catch (err) {
-      alert(errMsg(err));
+      showError(errMsg(err));
     } finally {
       setLoading(false);
     }
@@ -2491,7 +2478,7 @@ contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGu
                   <button 
                     onClick={() => {
                       navigator.clipboard.writeText(generateSource());
-                      alert("Source copied!");
+                      showInfo("Source copied to clipboard");
                     }}
                     className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white transition-all uppercase tracking-widest"
                   >
@@ -2629,7 +2616,7 @@ contract LitVMTokenFactory is Ownable {
   };
 
   const handleDeploy = async () => {
-    if (!name || !symbol || !supply) return alert("Required fields missing");
+    if (!name || !symbol || !supply) { showError("Required fields missing"); return; }
     setLoading(true);
     setTxInfo(null);
     try {
@@ -2647,7 +2634,7 @@ contract LitVMTokenFactory is Ownable {
       onDeployed?.();
       fetchHistory();
     } catch (err) {
-      alert(errMsg(err));
+      showError(errMsg(err));
     } finally {
       setLoading(false);
     }
@@ -2706,7 +2693,7 @@ contract LitVMTokenFactory is Ownable {
                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
                    <span className="text-[10px] font-bold text-white uppercase tracking-widest">TokenFactory.sol</span>
                 </div>
-                <button onClick={() => { navigator.clipboard.writeText(generateSource()); alert("Copied!"); }} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white uppercase tracking-widest transition-all">
+                <button onClick={() => { navigator.clipboard.writeText(generateSource()); showInfo("Copied to clipboard"); }} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white uppercase tracking-widest transition-all">
                   <Copy size={12} /> Copy
                 </button>
               </div>
@@ -2987,7 +2974,7 @@ const GamesPage = () => {
     try {
       const { claimGF } = await import('./lib/litdex-core-logic');
       await claimGF();
-      alert("Gaming Fuel claimed!");
+      showSuccess({ title: "GAMING FUEL CLAIMED", subtitle: "PROTOCOL VERIFICATION COMPLETE", rows: [{ label: "STATUS", value: "FUEL ADDED" }] });
       try {
         if (address) addNotif(address, {
           type: "gf",
@@ -2997,7 +2984,7 @@ const GamesPage = () => {
       } catch { /* ignore */ }
       fetchGF();
     } catch (err) {
-      alert(errMsg(err));
+      showError(errMsg(err));
     } finally {
       setClaiming(false);
     }
@@ -3007,10 +2994,10 @@ const GamesPage = () => {
      try {
        const { startGame } = await import('./lib/litdex-core-logic');
        await startGame(gameId);
-       alert("Game started! Redirecting to game engine...");
+       showInfo("Game started! Redirecting...");
        // Here you would normally redirect to the game canvas/route
      } catch (err: any) {
-       alert(err.message || "Failed to start game");
+       showError(err.message || "Failed to start game");
      }
   };
 
@@ -3470,7 +3457,7 @@ const FaucetPage = () => {
       const { faucetApi } = await import('./lib/litdex-core-logic');
       const res = await faucetApi.claim(address);
       if (res.ok) {
-        alert(res.message || "Claim successful!");
+        showSuccess({ title: "FAUCET CLAIMED", subtitle: "PROTOCOL VERIFICATION COMPLETE", rows: [{ label: "AMOUNT", value: "0.001 zkLTC" }, { label: "STATUS", value: res.message || "SENT" }] });
         try {
           if (address) addNotif(address, {
             type: "faucet",
@@ -3480,11 +3467,11 @@ const FaucetPage = () => {
         } catch { /* ignore */ }
         fetchStatus();
       } else {
-        alert(res.reason || res.message || "Claim failed. Check requirements.");
+        showError(res.reason || res.message || "Claim failed. Check requirements.");
       }
     } catch (err) {
       console.error(err);
-      alert("An error occurred during claiming.");
+      showError("An error occurred during claiming.");
     } finally {
       setClaiming(false);
     }

@@ -27,6 +27,7 @@ import {
   readProvider
 } from "@/lib/litdex-core-logic"
 import { addNotif } from "@/lib/notifications"
+import { showSuccess, showError, refreshPoints } from "@/lib/feedback"
 
 type Coin = {
   address: string
@@ -245,7 +246,7 @@ export default function SwapCard({
 
   const handleAction = async () => {
     if (!isConnected || !walletAddress) {
-      alert("Please connect your wallet first.");
+      showError("Please connect your wallet first.");
       return;
     }
     setIsSwapping(true);
@@ -270,15 +271,25 @@ export default function SwapCard({
         });
         setTxHash(hash);
         setTxStatus("success");
+        const ti = coinMap.get(fromAddr)?.symbol ?? "?";
+        const to = coinMap.get(toAddr)?.symbol ?? "?";
         try {
-          const ti = coinMap.get(fromAddr)?.symbol ?? "?";
-          const to = coinMap.get(toAddr)?.symbol ?? "?";
           if (walletAddress) addNotif(walletAddress, {
             type: "swap",
             title: "Swap Successful",
             message: `Swapped ${fromAmount} ${ti} → ${toAmount} ${to}`,
           });
         } catch { /* ignore */ }
+        showSuccess({
+          title: "SWAP CONFIRMED",
+          subtitle: "PROTOCOL VERIFICATION COMPLETE",
+          rows: [
+            { label: "SENT", value: `${fromAmount} ${ti}` },
+            { label: "RECEIVED", value: `${toAmount} ${to}` },
+            { label: "ROUTER", value: ROUTERS[rKey].label || "LiteSwap V2" },
+          ],
+        });
+        refreshPoints();
       } else {
         if (subMode === "add") {
           const rAddr = DEFAULT_ROUTER;
@@ -294,19 +305,28 @@ export default function SwapCard({
           });
           setTxHash(hash);
           setTxStatus("success");
+          const ta = coinMap.get(fromAddr)?.symbol ?? "?";
+          const tb = coinMap.get(toAddr)?.symbol ?? "?";
           try {
-            const ta = coinMap.get(fromAddr)?.symbol ?? "?";
-            const tb = coinMap.get(toAddr)?.symbol ?? "?";
             if (walletAddress) addNotif(walletAddress, {
               type: "lp",
               title: "Liquidity Added",
               message: `Added liquidity to ${ta} / ${tb} pool`,
             });
           } catch { /* ignore */ }
+          showSuccess({
+            title: "LIQUIDITY ADDED",
+            subtitle: "PROTOCOL VERIFICATION COMPLETE",
+            rows: [
+              { label: "PAIR", value: `${ta} / ${tb}` },
+              { label: "STATUS", value: "POOL UPDATED" },
+            ],
+          });
+          refreshPoints();
           fetchPositions();
         } else {
           if (!selectedLp) {
-            alert("Please select a liquidity position first.");
+            showError("Please select a liquidity position first.");
             return;
           }
           const rAddr = DEFAULT_ROUTER;
@@ -320,21 +340,30 @@ export default function SwapCard({
           });
           setTxHash(hash);
           setTxStatus("success");
+          const ta = coinMap.get(selectedLp.token0)?.symbol ?? "?";
+          const tb = coinMap.get(selectedLp.token1)?.symbol ?? "?";
           try {
-            const ta = coinMap.get(selectedLp.token0)?.symbol ?? "?";
-            const tb = coinMap.get(selectedLp.token1)?.symbol ?? "?";
             if (walletAddress) addNotif(walletAddress, {
               type: "lp",
               title: "Liquidity Removed",
               message: `Removed liquidity from ${ta} / ${tb} pool`,
             });
           } catch { /* ignore */ }
+          showSuccess({
+            title: "LIQUIDITY REMOVED",
+            subtitle: "PROTOCOL VERIFICATION COMPLETE",
+            rows: [
+              { label: "PAIR", value: `${ta} / ${tb}` },
+              { label: "STATUS", value: "TOKENS RETURNED" },
+            ],
+          });
           fetchPositions();
         }
       }
     } catch (err: any) {
       console.error("Action error:", err);
       setTxStatus("failed");
+      showError(errMsg(err));
     } finally {
       setIsSwapping(false);
     }

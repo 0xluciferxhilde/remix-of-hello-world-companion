@@ -7,6 +7,7 @@ import { wagmiConfig } from './lib/litdex-core-logic';
 import '@rainbow-me/rainbowkit/styles.css';
 import App from './App.tsx';
 import { Toaster } from 'sonner';
+import SuccessCard from './components/SuccessCard';
 import './index.css';
 
 const queryClient = new QueryClient();
@@ -18,6 +19,7 @@ createRoot(document.getElementById('root')!).render(
         <RainbowKitProvider theme={darkTheme()}>
           <App />
           <Toaster position="top-right" richColors theme="dark" />
+          <SuccessCard />
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
