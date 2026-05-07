@@ -3400,6 +3400,47 @@ export default function App() {
   const [notifOpen, setNotifOpen] = useState(false);
   const { notifs: notifList } = useNotifications(walletAddr);
   const unreadCount = notifList.filter(n => !n.read).length;
+  const [hasCheckedInToday, setHasCheckedInToday] = useState<boolean>(true);
+  const [hasNewNotif, setHasNewNotif] = useState<boolean>(false);
+  const [faucetModalOpen, setFaucetModalOpen] = useState(false);
+  const { openConnectModal } = useConnectModal();
+
+  // Check-in red dot — load from contract
+  useEffect(() => {
+    if (!walletAddr) { setHasCheckedInToday(true); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [info, currentDay] = await Promise.all([
+          readCheckinInfo(walletAddr),
+          readCurrentDay(),
+        ]);
+        if (!cancelled) setHasCheckedInToday(info.lastDay >= currentDay);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [walletAddr, activePage]);
+
+  // Notification red dot — localStorage + event listener
+  const notifFlagKey = walletAddr ? `litdex_has_new_notif_${walletAddr.toLowerCase()}` : "";
+  useEffect(() => {
+    if (!walletAddr) { setHasNewNotif(false); return; }
+    try { setHasNewNotif(localStorage.getItem(notifFlagKey) === "true"); } catch { /* ignore */ }
+    const onNotif = () => {
+      try { localStorage.setItem(notifFlagKey, "true"); } catch { /* ignore */ }
+      setHasNewNotif(true);
+    };
+    window.addEventListener("litdex:notif", onNotif);
+    return () => window.removeEventListener("litdex:notif", onNotif);
+  }, [walletAddr, notifFlagKey]);
+
+  // Open notif panel → mark as seen
+  useEffect(() => {
+    if (notifOpen && walletAddr) {
+      try { localStorage.setItem(notifFlagKey, "false"); } catch { /* ignore */ }
+      setHasNewNotif(false);
+    }
+  }, [notifOpen, walletAddr, notifFlagKey]);
 
   // Helper to handle page changes while tracking history for the check-in overlay
   const handlePageChange = (p: PageID) => {
@@ -3409,12 +3450,21 @@ export default function App() {
     setActivePage(p);
   };
 
+  const handleFaucetClick = () => {
+    if (!walletAddr) {
+      openConnectModal?.();
+      return;
+    }
+    setFaucetModalOpen(true);
+  };
+
   // Close dropdown on click outside logic simplified for React
   useEffect(() => {
     const handleScroll = () => setActiveDropdown(null);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
 
   const renderPage = (page: PageID) => {
     switch (page) {
