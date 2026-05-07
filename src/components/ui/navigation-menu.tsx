@@ -103,7 +103,7 @@ export function AnimatedNavFramer({ activePage, onPageChange }: { activePage: st
 
   return (
     <>
-    <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[90vw] md:max-w-none">
+    <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[9999] w-auto max-w-[90vw] md:max-w-none">
       <motion.nav
         initial={{ y: -80, opacity: 0 }}
         animate={isExpanded ? "expanded" : "collapsed"}
