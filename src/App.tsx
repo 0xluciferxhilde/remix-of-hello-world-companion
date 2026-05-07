@@ -37,7 +37,9 @@ import {
   Copy,
   Download,
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -3705,6 +3707,25 @@ export default function App() {
   const [faucetModalOpen, setFaucetModalOpen] = useState(false);
   const { openConnectModal } = useConnectModal();
 
+  // Theme (dark/light) toggle — persisted in localStorage
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('litdex_theme');
+      const initial = saved === 'light' || saved === 'dark' ? saved : 'dark';
+      setTheme(initial as 'dark' | 'light');
+      document.documentElement.setAttribute('data-theme', initial);
+    } catch {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  }, []);
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('litdex_theme', next); } catch { /* ignore */ }
+  };
+
   // Check-in red dot — load from contract
   useEffect(() => {
     if (!walletAddr) { setHasCheckedInToday(true); return; }
@@ -3808,6 +3829,43 @@ export default function App() {
           </div>
           <div className="absolute -inset-2 bg-white/20 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
         </div>
+      </div>
+
+      {/* Theme Toggle — below LD logo */}
+      <div className="fixed top-24 left-8 z-50 flex justify-center" style={{ width: '48px' }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleTheme(); }}
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          aria-label="Toggle theme"
+          className="h-9 px-3 rounded-full border border-brand-border bg-brand-surface text-brand-text-primary flex items-center justify-center gap-1.5 hover:bg-brand-surface-2 transition-all duration-300 shadow-lg backdrop-blur-xl"
+          style={{ transition: 'all 0.3s ease' }}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            {theme === 'dark' ? (
+              <motion.span
+                key="moon"
+                initial={{ rotate: -90, opacity: 0, scale: 0.6 }}
+                animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                exit={{ rotate: 90, opacity: 0, scale: 0.6 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="flex"
+              >
+                <Moon size={16} />
+              </motion.span>
+            ) : (
+              <motion.span
+                key="sun"
+                initial={{ rotate: -90, opacity: 0, scale: 0.6 }}
+                animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                exit={{ rotate: 90, opacity: 0, scale: 0.6 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="flex"
+              >
+                <Sun size={16} />
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </button>
       </div>
 
       <div className="flex-1 relative flex flex-col">
