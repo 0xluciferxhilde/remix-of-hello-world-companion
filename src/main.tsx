@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { wagmiConfig } from './lib/litdex-core-logic';
 import '@rainbow-me/rainbowkit/styles.css';
 import App from './App.tsx';
+import { Toaster } from 'sonner';
 import './index.css';
 
 const queryClient = new QueryClient();
