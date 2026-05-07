@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import NotificationsPanel, { useNotifications } from './components/NotificationsPanel';
+import { addNotif } from './lib/notifications';
 import { 
   ArrowLeftRight, 
   Droplets, 
@@ -494,6 +496,21 @@ const CheckinPage = () => {
         zkLTC: zkLTCBonus || undefined,
         hash
       });
+
+      try {
+        if (address) {
+          addNotif(address, {
+            type: "checkin",
+            title: "Daily Check-in",
+            message: `Day ${Number(newInfo.streak)} streak! Earned ${ldexVal} LDEX`,
+          });
+          addNotif(address, {
+            type: "points",
+            title: "Points Earned",
+            message: `+10 points earned from daily check-in`,
+          });
+        }
+      } catch { /* ignore */ }
       
       setInfo({
         streak: Number(newInfo.streak),
@@ -1090,6 +1107,23 @@ const ERC20Form = ({ onDeployed }: any) => {
 
       setTxHash(result.txHash);
       setTxStatus("success");
+
+      try {
+        if (address && (result as any).contractAddress) {
+          const ca = (result as any).contractAddress as string;
+          addNotif(address, {
+            type: "deploy",
+            title: "Token Deployed",
+            message: `${symbol} deployed at ${ca.slice(0,6)}...${ca.slice(-4)}`,
+          });
+        } else if (address) {
+          addNotif(address, {
+            type: "deploy",
+            title: "Token Deployed",
+            message: `${symbol} deployed successfully`,
+          });
+        }
+      } catch { /* ignore */ }
 
       // Points API Integration
       try {
@@ -2583,6 +2617,7 @@ contract LitVMTokenFactory is Ownable {
 const QuestsPage = () => {
   const { address, isConnected } = useAccount();
   const [completed, setCompleted] = useState<Record<string, boolean>>({});
+  const [visited, setVisited] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [QUESTS_LIST, setQuestsList] = useState<any[]>([]);
 
@@ -2625,6 +2660,7 @@ const QuestsPage = () => {
     try {
       const { questApi } = await import('./lib/litdex-core-logic');
       try { await questApi.complete(address, questId); } catch { /* tolerate */ }
+      const quest = QUESTS_LIST.find(q => q.id === questId);
       setCompleted(prev => {
         const next = { ...prev, [questId]: true };
         if (cacheKey) {
@@ -2632,6 +2668,18 @@ const QuestsPage = () => {
         }
         return next;
       });
+      if (quest) {
+        addNotif(address, {
+          type: "quest",
+          title: "Quest Completed",
+          message: `${quest.title} completed! +${quest.pts} points`,
+        });
+        addNotif(address, {
+          type: "points",
+          title: "Points Earned",
+          message: `+${quest.pts} points earned from quest`,
+        });
+      }
     } finally {
       setBusy(null);
     }
@@ -2688,6 +2736,7 @@ const QuestsPage = () => {
             <div className="space-y-3">
               {items.map(q => {
                 const isDone = !!completed[q.id];
+                const hasVisited = !!visited[q.id];
                 return (
                   <Card key={q.id} className={cn(
                     "p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all",
@@ -2718,6 +2767,7 @@ const QuestsPage = () => {
                         href={q.url}
                         target="_blank"
                         rel="noreferrer"
+                        onClick={() => setVisited(prev => ({ ...prev, [q.id]: true }))}
                         className={cn(
                           "flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 px-5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
                           isDone
@@ -2727,18 +2777,20 @@ const QuestsPage = () => {
                       >
                         Go <ExternalLink size={11} />
                       </a>
-                      <button
-                        onClick={() => markDone(q.id)}
-                        disabled={isDone || busy === q.id || !isConnected}
-                        className={cn(
-                          "flex-1 md:flex-none px-5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
-                          isDone
-                            ? "bg-white/5 text-white/30 cursor-not-allowed"
-                            : "bg-white text-black hover:opacity-90 disabled:opacity-40"
-                        )}
-                      >
-                        {isDone ? "Completed" : busy === q.id ? "Saving…" : "Mark Done"}
-                      </button>
+                      {(hasVisited || isDone) && (
+                        <button
+                          onClick={() => markDone(q.id)}
+                          disabled={isDone || busy === q.id || !isConnected}
+                          className={cn(
+                            "flex-1 md:flex-none px-5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
+                            isDone
+                              ? "bg-white/10 text-white/30 cursor-not-allowed"
+                              : "bg-white text-black hover:opacity-90 disabled:opacity-40"
+                          )}
+                        >
+                          {isDone ? "Completed" : busy === q.id ? "Saving…" : "Complete"}
+                        </button>
+                      )}
                     </div>
                   </Card>
                 );
@@ -2780,6 +2832,13 @@ const GamesPage = () => {
       const { claimGF } = await import('./lib/litdex-core-logic');
       await claimGF();
       alert("Gaming Fuel claimed!");
+      try {
+        if (address) addNotif(address, {
+          type: "gf",
+          title: "Game Fuel Claimed",
+          message: `Game Fuel added to your balance`,
+        });
+      } catch { /* ignore */ }
       fetchGF();
     } catch (err) {
       alert(errMsg(err));
@@ -3237,6 +3296,13 @@ const FaucetPage = () => {
       const res = await faucetApi.claim(address);
       if (res.ok) {
         alert(res.message || "Claim successful!");
+        try {
+          if (address) addNotif(address, {
+            type: "faucet",
+            title: "Faucet Claimed",
+            message: `0.001 zkLTC sent to your wallet`,
+          });
+        } catch { /* ignore */ }
         fetchStatus();
       } else {
         alert(res.reason || res.message || "Claim failed. Check requirements.");
@@ -3327,9 +3393,13 @@ const WalletBalanceDisplay = () => {
 };
 
 export default function App() {
+  const { address: walletAddr } = useAccount();
   const [activePage, setActivePage] = useState<PageID>('swap');
   const [previousPage, setPreviousPage] = useState<PageID>('swap');
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const { notifs: notifList } = useNotifications(walletAddr);
+  const unreadCount = notifList.filter(n => !n.read).length;
 
   // Helper to handle page changes while tracking history for the check-in overlay
   const handlePageChange = (p: PageID) => {
@@ -3419,9 +3489,18 @@ export default function App() {
               >
                 <CalendarCheck size={24} className={cn("transition-colors", activePage === 'checkin' ? "text-white" : "group-hover:text-white")} />
               </button>
-              <button className="relative w-16 h-16 flex items-center justify-center rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-white/60 backdrop-blur-3xl shadow-2xl group">
+              <button
+                onClick={() => setNotifOpen(o => !o)}
+                className="relative w-16 h-16 flex items-center justify-center rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-white/60 backdrop-blur-3xl shadow-2xl group"
+              >
                 <Bell size={24} className="group-hover:text-white transition-colors" />
-                <div className="absolute top-5 right-5 w-2.5 h-2.5 bg-white rounded-full ring-4 ring-brand-bg shadow-[0_0_15px_rgba(255,255,255,0.8)]" />
+                {unreadCount > 0 && (
+                  unreadCount > 9 ? (
+                    <div className="absolute top-3 right-3 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-brand-bg">9+</div>
+                  ) : (
+                    <div className="absolute top-4 right-4 w-2.5 h-2.5 bg-red-500 rounded-full ring-4 ring-brand-bg shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
+                  )
+                )}
               </button>
             </div>
         </div>
@@ -3522,6 +3601,8 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      <NotificationsPanel open={notifOpen} onClose={() => setNotifOpen(false)} wallet={walletAddr} />
     </div>
   );
 }
