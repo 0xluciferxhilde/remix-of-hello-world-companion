@@ -1242,6 +1242,16 @@ const ERC20Form = ({ onDeployed }: any) => {
     setLoading(true);
     setTxStatus(null);
     setTxHash(null);
+
+    // Capture daily points BEFORE deploy
+    let dailyBefore = 0n;
+    try {
+      if (address) {
+        const before = await readPoints(address);
+        dailyBefore = before.daily;
+      }
+    } catch { /* ignore */ }
+
     try {
       const result = await deployTokenLitDeX({
         name,
@@ -1269,21 +1279,23 @@ const ERC20Form = ({ onDeployed }: any) => {
         }
       } catch { /* ignore */ }
 
-      // Points API Integration
-      try {
-        await fetch("https://api.test-hub.xyz/quest/complete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            wallet: address,
-            questId: "deploy_" + result.txHash.slice(0, 10).toLowerCase()
-          })
-        });
-      } catch (e) {
-        console.warn("Points API failed", e);
-      }
-
-      onDeployed?.();
+      // Wait 2s then re-fetch points and toast based on prior daily
+      setTimeout(async () => {
+        try {
+          if (address) {
+            await readPoints(address); // refresh on-chain read
+          }
+        } catch { /* ignore */ }
+        try {
+          const { toast } = await import("sonner");
+          if (dailyBefore < 100n) {
+            toast.success("✅ Token deployed! +5 points earned");
+          } else {
+            toast.success("✅ Token deployed! (Daily cap reached — no points)");
+          }
+        } catch { /* ignore */ }
+        onDeployed?.();
+      }, 2000);
     } catch (err) {
       console.error("Deploy error:", err);
       setTxStatus("failed");
