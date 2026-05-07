@@ -3392,6 +3392,113 @@ const WalletBalanceDisplay = () => {
   );
 };
 
+// --- Faucet Modal ---
+const FaucetModal = ({ open, onClose, wallet }: { open: boolean; onClose: () => void; wallet?: string }) => {
+  const [status, setStatus] = useState<any>(null);
+  const [claiming, setClaiming] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!open || !wallet) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { faucetApi } = await import('./lib/litdex-core-logic');
+        const s = await faucetApi.getStatus(wallet);
+        if (!cancelled) setStatus(s);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [open, wallet]);
+
+  useEffect(() => {
+    if (!open) return;
+    const i = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(i);
+  }, [open]);
+
+  const remaining = status?.nextClaimIn ? Math.max(0, status.nextClaimIn - Math.floor((now - (status._fetchedAt || now)) / 1000)) : 0;
+  useEffect(() => { if (status && !status._fetchedAt) setStatus({ ...status, _fetchedAt: Date.now() }); }, [status]);
+
+  const fmt = (sec: number) => {
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d)}:${pad(h)}:${pad(m)}:${pad(s)}`;
+  };
+
+  const handleClaim = async () => {
+    if (!wallet) return;
+    setClaiming(true);
+    try {
+      const { faucetApi } = await import('./lib/litdex-core-logic');
+      const res = await faucetApi.claim(wallet);
+      if (res.ok) {
+        alert("✅ 0.001 zkLTC sent to your wallet!");
+        try {
+          addNotif(wallet, { type: "faucet", title: "Faucet Claimed", message: "0.001 zkLTC sent to your wallet" });
+        } catch { /* ignore */ }
+        onClose();
+      } else {
+        const reasonMap: Record<string, string> = {
+          no_external: "You need $1+ USDC or BNB on BSC chain to use faucet",
+          has_enough: "You already have enough zkLTC",
+        };
+        alert(reasonMap[res.reason || ""] || res.message || res.reason || "Claim failed");
+      }
+    } catch {
+      alert("An error occurred during claiming.");
+    } finally {
+      setClaiming(false);
+    }
+  };
+
+  if (!open) return null;
+  const canClaim = status?.canClaim;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md bg-brand-surface border border-brand-border rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold tracking-tight">zkLTC Faucet</h2>
+          <button onClick={onClose} className="text-brand-text-muted hover:text-white">
+            <X size={18} />
+          </button>
+        </div>
+        {!status ? (
+          <p className="text-brand-text-muted text-sm py-8 text-center">Loading status…</p>
+        ) : canClaim ? (
+          <>
+            <p className="text-brand-text-muted text-sm mb-2">Claim 0.001 zkLTC to get started on LitVM testnet</p>
+            <p className="text-xs text-brand-text-muted/70 mb-6">Requires $1+ USDC or BNB on BSC chain</p>
+            <button
+              onClick={handleClaim}
+              disabled={claiming}
+              className="w-full py-3.5 bg-white text-black rounded-xl font-bold text-base hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              {claiming ? "Claiming..." : "Claim 0.001 zkLTC"}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-brand-text-muted text-sm mb-3">Next claim available in:</p>
+            <div className="text-center font-mono text-3xl font-bold tabular-nums my-6 tracking-tight">
+              {fmt(remaining)}
+            </div>
+            <p className="text-xs text-brand-text-muted/70 text-center mb-4">Faucet refills every 7 days</p>
+            <button onClick={onClose} className="w-full py-3 bg-white/5 border border-white/10 text-white rounded-xl font-bold text-sm hover:bg-white/10 transition-all">
+              Close
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const { address: walletAddr } = useAccount();
   const [activePage, setActivePage] = useState<PageID>('swap');
