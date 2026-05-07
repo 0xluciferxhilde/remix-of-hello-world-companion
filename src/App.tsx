@@ -772,10 +772,12 @@ const NFTIcon = ({ label, color }: { label: string; color: string }) => (
   </div>
 );
 
+const NFT_IMAGE_BASE = "https://raw.githubusercontent.com/zorodas/friendly-greetings/main/public/nfts";
+
 const NFT_TIER_META = [
-  { nftType: 1 as const, name: "LitShard", rarity: "COMMON", label: "LS", color: "#888888", cost: 1000,  maxSupply: 9999, rewards: "0.0001 zkLTC + 10 USDC + 2 LDEX" },
-  { nftType: 2 as const, name: "LitCore",  rarity: "RARE",   label: "LC", color: "#F97316", cost: 5000,  maxSupply: 4999, rewards: "0.0005 zkLTC + 50 USDC + 10 LDEX" },
-  { nftType: 3 as const, name: "LitGod",   rarity: "EPIC",   label: "LG", color: "#a855f7", cost: 10000, maxSupply: 999,  rewards: "0.001 zkLTC + 100 USDC + 20 LDEX" },
+  { nftType: 1 as const, name: "LitShard", rarity: "COMMON", label: "LS", color: "#888888", image: `${NFT_IMAGE_BASE}/litshard.png`, cost: 1000,  maxSupply: 9999, rewards: "0.0001 zkLTC + 10 USDC + 2 LDEX" },
+  { nftType: 2 as const, name: "LitCore",  rarity: "RARE",   label: "LC", color: "#F97316", image: `${NFT_IMAGE_BASE}/litcore.png`,  cost: 5000,  maxSupply: 4999, rewards: "0.0005 zkLTC + 50 USDC + 10 LDEX" },
+  { nftType: 3 as const, name: "LitGod",   rarity: "EPIC",   label: "LG", color: "#a855f7", image: `${NFT_IMAGE_BASE}/litgod.png`,   cost: 10000, maxSupply: 999,  rewards: "0.001 zkLTC + 100 USDC + 20 LDEX" },
 ];
 
 // --- Page: NFTs ---
@@ -881,11 +883,11 @@ const NFTsPage = () => {
           const minting = mintingType === tier.nftType;
           return (
             <div key={tier.nftType} className="rounded-2xl border border-white/10 bg-brand-surface overflow-hidden hover:border-white/20 transition-all">
-              <div className="relative aspect-square bg-brand-surface-2 p-6">
+              <div className="relative w-full bg-black flex items-center justify-center" style={{ height: 240 }}>
                 <div className="absolute top-4 right-4 px-2 py-1 rounded-md bg-brand-bg/80 backdrop-blur-md border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white z-10">
                   {tier.rarity}
                 </div>
-                <NFTIcon label={tier.label} color={tier.color} />
+                <img src={tier.image} alt={tier.name} className="w-full h-full object-contain" />
               </div>
               <div className="p-5 space-y-4">
                 <div>
@@ -3857,7 +3859,7 @@ export default function App() {
 
         {/* Main Content */}
         <main className={cn(
-          "container mx-auto px-6 pt-24 pb-12 flex-1 transition-all duration-500",
+          "container mx-auto px-6 pt-40 pb-12 flex-1 transition-all duration-500",
           activePage === 'checkin' && "blur-xl scale-[0.98] opacity-30 pointer-events-none"
         )}>
           <AnimatePresence mode="wait">
