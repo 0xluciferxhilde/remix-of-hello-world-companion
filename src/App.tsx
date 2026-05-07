@@ -3857,7 +3857,7 @@ export default function App() {
 
         {/* Main Content */}
         <main className={cn(
-          "container mx-auto px-6 pt-24 pb-12 flex-1 transition-all duration-500",
+          "container mx-auto px-6 pt-40 pb-12 flex-1 transition-all duration-500",
           activePage === 'checkin' && "blur-xl scale-[0.98] opacity-30 pointer-events-none"
         )}>
           <AnimatePresence mode="wait">
