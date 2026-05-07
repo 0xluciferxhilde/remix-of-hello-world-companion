@@ -19,6 +19,7 @@ createRoot(document.getElementById('root')!).render(
         <RainbowKitProvider theme={darkTheme()}>
           <App />
           <Toaster position="top-right" richColors theme="dark" />
+          <SuccessCard />
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
