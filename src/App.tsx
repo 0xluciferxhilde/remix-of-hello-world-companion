@@ -47,7 +47,7 @@ import { formatEther, parseEther, formatUnits, parseUnits } from 'ethers';
 import SwapCard from './components/ui/crypto-swap-card';
 import { AnimatedNavFramer } from './components/ui/navigation-menu';
 import { litvmChain, errMsg, LITDEX_DEPLOYER_ADDRESS, readTotalDeployed, deployTokenLitDeX, shortAddr, readDeployments, readDeployFee, readLegacyDeployFee, deployTokenLegacy, getLegacyTokenInfo, getLegacyTokensByCreator, getLegacyTotalDeployedDisplay, readPoints, readCheckinInfo, readCurrentDay, checkinToday } from './lib/litdex-core-logic';
-import { showSuccess, showError, refreshPoints } from './lib/feedback';
+import { showSuccess, showError, showInfo, refreshPoints } from './lib/feedback';
 
 // --- Types ---
 type PageID = 'swap' | 'pool' | 'deploy' | 'points' | 'checkin' | 'nfts' | 'messenger' | 'quests' | 'games' | 'faucet';
@@ -1079,7 +1079,7 @@ const DeployPage = () => {
             <button 
               onClick={() => {
                 navigator.clipboard.writeText(LITDEX_DEPLOYER_ADDRESS);
-                alert("Copied!");
+                showInfo("Copied to clipboard");
               }}
               className="p-1.5 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10"
             >
@@ -1681,8 +1681,8 @@ contract MNFT is ERC721, Ownable {
   };
 
   const handleDeploy = async () => {
-    if (!name || !symbol || !maxSupply) return alert("Fill all fields");
-    if (!address) return alert("Connect wallet first");
+    if (!name || !symbol || !maxSupply) { showError("Please fill all fields"); return; }
+    if (!address) { showError("Connect wallet first"); return; }
 
     setLoading(true);
     setTxStatus(null);
@@ -1998,7 +1998,7 @@ contract MNFT is ERC721, Ownable {
                   <button 
                     onClick={() => {
                       navigator.clipboard.writeText(generateSource());
-                      alert("Source copied!");
+                      showInfo("Source copied to clipboard");
                     }}
                     className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white transition-all uppercase tracking-widest"
                   >
@@ -2143,7 +2143,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
   };
 
   const handleDeploy = async () => {
-    if (!stakingToken) return alert("Staking token required");
+    if (!stakingToken) { showError("Staking token required"); return; }
     setLoading(true);
     setTxInfo(null);
     try {
@@ -2160,7 +2160,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
       setTxInfo({ hash: res.txHash, address: res.contractAddress });
       onDeployed?.();
     } catch (err) {
-      alert(errMsg(err));
+      showError(errMsg(err));
     } finally {
       setLoading(false);
     }
@@ -2262,7 +2262,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
                   <button 
                     onClick={() => {
                       navigator.clipboard.writeText(generateSource());
-                      alert("Source copied!");
+                      showInfo("Source copied to clipboard");
                     }}
                     className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white transition-all uppercase tracking-widest"
                   >
@@ -2368,7 +2368,7 @@ contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGu
   };
 
   const handleDeploy = async () => {
-    if (!tokenAddress || !beneficiary || !amount) return alert("Required fields missing");
+    if (!tokenAddress || !beneficiary || !amount) { showError("Required fields missing"); return; }
     setLoading(true);
     setTxInfo(null);
     try {
@@ -2385,7 +2385,7 @@ contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGu
       setTxInfo({ hash: res.txHash, address: res.contractAddress });
       onDeployed?.();
     } catch (err) {
-      alert(errMsg(err));
+      showError(errMsg(err));
     } finally {
       setLoading(false);
     }
@@ -2500,7 +2500,7 @@ contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGu
                   <button 
                     onClick={() => {
                       navigator.clipboard.writeText(generateSource());
-                      alert("Source copied!");
+                      showInfo("Source copied to clipboard");
                     }}
                     className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white transition-all uppercase tracking-widest"
                   >
@@ -2638,7 +2638,7 @@ contract LitVMTokenFactory is Ownable {
   };
 
   const handleDeploy = async () => {
-    if (!name || !symbol || !supply) return alert("Required fields missing");
+    if (!name || !symbol || !supply) { showError("Required fields missing"); return; }
     setLoading(true);
     setTxInfo(null);
     try {
@@ -2656,7 +2656,7 @@ contract LitVMTokenFactory is Ownable {
       onDeployed?.();
       fetchHistory();
     } catch (err) {
-      alert(errMsg(err));
+      showError(errMsg(err));
     } finally {
       setLoading(false);
     }
@@ -2715,7 +2715,7 @@ contract LitVMTokenFactory is Ownable {
                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
                    <span className="text-[10px] font-bold text-white uppercase tracking-widest">TokenFactory.sol</span>
                 </div>
-                <button onClick={() => { navigator.clipboard.writeText(generateSource()); alert("Copied!"); }} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white uppercase tracking-widest transition-all">
+                <button onClick={() => { navigator.clipboard.writeText(generateSource()); showInfo("Copied to clipboard"); }} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-brand-text-muted hover:text-white uppercase tracking-widest transition-all">
                   <Copy size={12} /> Copy
                 </button>
               </div>
@@ -2996,7 +2996,7 @@ const GamesPage = () => {
     try {
       const { claimGF } = await import('./lib/litdex-core-logic');
       await claimGF();
-      alert("Gaming Fuel claimed!");
+      showSuccess({ title: "GAMING FUEL CLAIMED", subtitle: "PROTOCOL VERIFICATION COMPLETE", rows: [{ label: "STATUS", value: "FUEL ADDED" }] });
       try {
         if (address) addNotif(address, {
           type: "gf",
@@ -3006,7 +3006,7 @@ const GamesPage = () => {
       } catch { /* ignore */ }
       fetchGF();
     } catch (err) {
-      alert(errMsg(err));
+      showError(errMsg(err));
     } finally {
       setClaiming(false);
     }
@@ -3016,10 +3016,10 @@ const GamesPage = () => {
      try {
        const { startGame } = await import('./lib/litdex-core-logic');
        await startGame(gameId);
-       alert("Game started! Redirecting to game engine...");
+       showInfo("Game started! Redirecting...");
        // Here you would normally redirect to the game canvas/route
      } catch (err: any) {
-       alert(err.message || "Failed to start game");
+       showError(err.message || "Failed to start game");
      }
   };
 
@@ -3479,7 +3479,7 @@ const FaucetPage = () => {
       const { faucetApi } = await import('./lib/litdex-core-logic');
       const res = await faucetApi.claim(address);
       if (res.ok) {
-        alert(res.message || "Claim successful!");
+        showSuccess({ title: "FAUCET CLAIMED", subtitle: "PROTOCOL VERIFICATION COMPLETE", rows: [{ label: "AMOUNT", value: "0.001 zkLTC" }, { label: "STATUS", value: res.message || "SENT" }] });
         try {
           if (address) addNotif(address, {
             type: "faucet",
@@ -3489,11 +3489,11 @@ const FaucetPage = () => {
         } catch { /* ignore */ }
         fetchStatus();
       } else {
-        alert(res.reason || res.message || "Claim failed. Check requirements.");
+        showError(res.reason || res.message || "Claim failed. Check requirements.");
       }
     } catch (err) {
       console.error(err);
-      alert("An error occurred during claiming.");
+      showError("An error occurred during claiming.");
     } finally {
       setClaiming(false);
     }
