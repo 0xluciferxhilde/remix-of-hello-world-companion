@@ -3790,9 +3790,6 @@ export default function App() {
           </div>
           <div className="absolute -inset-2 bg-white/20 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
         </div>
-        <div className="flex flex-col -gap-1">
-          <span className="text-2xl sm:text-3xl font-black tracking-tighter text-white leading-none italic group-hover:tracking-normal transition-all duration-700">LitDeX</span>
-        </div>
       </div>
 
       <div className="flex-1 relative flex flex-col">
