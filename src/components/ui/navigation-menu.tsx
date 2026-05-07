@@ -103,10 +103,7 @@ export function AnimatedNavFramer({ activePage, onPageChange }: { activePage: st
 
   return (
     <>
-    <div
-      className="fixed top-0 left-0 right-0 z-[9999] flex items-center justify-center h-16 bg-black border-b border-white/5"
-      style={{ backdropFilter: "none", background: "#000000" }}
-    >
+    <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[9999] w-auto max-w-[90vw] md:max-w-none">
       <motion.nav
         initial={{ y: -80, opacity: 0 }}
         animate={isExpanded ? "expanded" : "collapsed"}
@@ -115,7 +112,7 @@ export function AnimatedNavFramer({ activePage, onPageChange }: { activePage: st
         whileTap={!isExpanded ? { scale: 0.95 } : {}}
         onClick={handleNavClick}
         className={cn(
-          "flex items-center overflow-hidden h-14 px-2 sm:px-4 max-w-[95vw]",
+          "flex items-center overflow-hidden rounded-full border bg-black/40 shadow-2xl backdrop-blur-xl h-14 sm:h-16 border-white/5 px-2 sm:px-4",
           !isExpanded && "cursor-pointer justify-center"
         )}
       >
