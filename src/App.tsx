@@ -772,12 +772,29 @@ const NFTIcon = ({ label, color }: { label: string; color: string }) => (
   </div>
 );
 
-const NFT_IMAGE_BASE = "https://raw.githubusercontent.com/zorodas/friendly-greetings/main/public/nfts";
+type NFTTier = "common" | "rare" | "epic";
+const StackIcon = ({ tier }: { tier: NFTTier }) => {
+  const configs = {
+    common: { color: "#ffffff", filter: "none" },
+    rare:   { color: "#F97316", filter: "drop-shadow(0 0 6px #F97316) drop-shadow(0 0 12px #F97316aa)" },
+    epic:   { color: "#a855f7", filter: "drop-shadow(0 0 8px #a855f7) drop-shadow(0 0 20px #a855f7) drop-shadow(0 0 40px #a855f788)" },
+  };
+  const c = configs[tier];
+  return (
+    <div className="w-full flex items-center justify-center py-12 bg-[#080808]">
+      <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke={c.color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: c.filter }}>
+        <polygon points="12 2 2 7 12 12 22 7 12 2" />
+        <polyline points="2 17 12 22 22 17" />
+        <polyline points="2 12 12 17 22 12" />
+      </svg>
+    </div>
+  );
+};
 
 const NFT_TIER_META = [
-  { nftType: 1 as const, name: "LitShard", rarity: "COMMON", label: "LS", color: "#888888", image: `${NFT_IMAGE_BASE}/litshard.png`, cost: 1000,  maxSupply: 9999, rewards: "0.0001 zkLTC + 10 USDC + 2 LDEX" },
-  { nftType: 2 as const, name: "LitCore",  rarity: "RARE",   label: "LC", color: "#F97316", image: `${NFT_IMAGE_BASE}/litcore.png`,  cost: 5000,  maxSupply: 4999, rewards: "0.0005 zkLTC + 50 USDC + 10 LDEX" },
-  { nftType: 3 as const, name: "LitGod",   rarity: "EPIC",   label: "LG", color: "#a855f7", image: `${NFT_IMAGE_BASE}/litgod.png`,   cost: 10000, maxSupply: 999,  rewards: "0.001 zkLTC + 100 USDC + 20 LDEX" },
+  { nftType: 1 as const, name: "LitShard", rarity: "COMMON", tier: "common" as NFTTier, label: "LS", color: "#888888", cost: 1000,  maxSupply: 9999, rewards: "0.0001 zkLTC + 10 USDC + 2 LDEX" },
+  { nftType: 2 as const, name: "LitCore",  rarity: "RARE",   tier: "rare"   as NFTTier, label: "LC", color: "#F97316", cost: 5000,  maxSupply: 4999, rewards: "0.0005 zkLTC + 50 USDC + 10 LDEX" },
+  { nftType: 3 as const, name: "LitGod",   rarity: "EPIC",   tier: "epic"   as NFTTier, label: "LG", color: "#a855f7", cost: 10000, maxSupply: 999,  rewards: "0.001 zkLTC + 100 USDC + 20 LDEX" },
 ];
 
 // --- Page: NFTs ---
@@ -882,12 +899,12 @@ const NFTsPage = () => {
           const notEnough = totalPoints < BigInt(tier.cost);
           const minting = mintingType === tier.nftType;
           return (
-            <div key={tier.nftType} className="rounded-2xl border border-white/10 bg-brand-surface overflow-hidden hover:border-white/20 transition-all">
-              <div className="relative w-full bg-black flex items-center justify-center" style={{ height: 240 }}>
+          <div key={tier.nftType} className="rounded-2xl border border-white/10 bg-brand-surface overflow-hidden hover:border-white/20 transition-all">
+              <div className="relative w-full bg-[#080808] flex items-center justify-center">
                 <div className="absolute top-4 right-4 px-2 py-1 rounded-md bg-brand-bg/80 backdrop-blur-md border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white z-10">
                   {tier.rarity}
                 </div>
-                <img src={tier.image} alt={tier.name} className="w-full h-full object-contain" />
+                <StackIcon tier={tier.tier} />
               </div>
               <div className="p-5 space-y-4">
                 <div>
@@ -947,11 +964,11 @@ const NFTsPage = () => {
               const info = NFT_TIER_META.find(t => t.nftType === nft.nftType) || NFT_TIER_META[0];
               return (
                 <div key={i} className="rounded-2xl border border-white/10 bg-brand-surface overflow-hidden">
-                  <div className="relative aspect-square bg-brand-surface-2 p-6">
+                  <div className="relative bg-[#080808]">
                     <div className="absolute top-4 right-4 px-2 py-1 rounded-md bg-brand-bg/80 backdrop-blur-md border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white z-10">
                       {info.rarity}
                     </div>
-                    <NFTIcon label={info.label} color={info.color} />
+                    <StackIcon tier={info.tier} />
                   </div>
                   <div className="p-4">
                     <h3 className="font-bold">{info.name}</h3>
@@ -3858,10 +3875,13 @@ export default function App() {
         />
 
         {/* Main Content */}
-        <main className={cn(
-          "container mx-auto px-6 pt-40 pb-12 flex-1 transition-all duration-500",
-          activePage === 'checkin' && "blur-xl scale-[0.98] opacity-30 pointer-events-none"
-        )}>
+        <main
+          style={{ paddingTop: 64 }}
+          className={cn(
+            "container mx-auto px-6 pb-12 flex-1 transition-all duration-500",
+            activePage === 'checkin' && "blur-xl scale-[0.98] opacity-30 pointer-events-none"
+          )}
+        >
           <AnimatePresence mode="wait">
             <motion.div
               key={activePage === 'checkin' ? previousPage : activePage}
