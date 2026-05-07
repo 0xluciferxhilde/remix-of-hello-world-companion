@@ -476,18 +476,14 @@ const CheckinPage = () => {
     setCheckinError(null);
     try {
       const hash = await checkinToday();
-      alert("Txn check-in successful check txn hash");
       const newInfo = await readCheckinInfo(address);
       
       const ldexVal = formatEther(newInfo.nextLDEX);
       
       let zkLTCBonus = "";
       const now = new Date();
-      // IST is UTC+5.5. So 18:30 UTC is 00:00 IST.
-      // JS Date getUTCDay() for 18:30+ UTC might be different.
-      // Let's use IST day.
       const istDate = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
-      if (istDate.getUTCDay() === 0) { // Sunday
+      if (istDate.getUTCDay() === 0) {
         const dayOfMonth = istDate.getUTCDate();
         const week = Math.ceil(dayOfMonth / 7);
         if (week === 1) zkLTCBonus = "0.001";
@@ -502,6 +498,19 @@ const CheckinPage = () => {
         zkLTC: zkLTCBonus || undefined,
         hash
       });
+
+      const rows: { label: string; value: string }[] = [
+        { label: "BASE POINTS", value: "+10 PTS" },
+        { label: "INCENTIVE YIELD", value: `+${Number(ldexVal).toLocaleString()} LDEX` },
+      ];
+      if (zkLTCBonus) rows.push({ label: "SUNDAY BONUS", value: `+${zkLTCBonus} zkLTC 🎁` });
+      rows.push({ label: "STREAK", value: `Day ${Number(newInfo.streak)}` });
+      showSuccess({
+        title: "MISSION SUCCESS",
+        subtitle: "PROTOCOL VERIFICATION COMPLETE",
+        rows,
+      });
+      refreshPoints();
 
       try {
         if (address) {
