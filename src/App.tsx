@@ -3395,61 +3395,72 @@ const WalletBalanceDisplay = () => {
 // --- Faucet Modal ---
 const FaucetModal = ({ open, onClose, wallet }: { open: boolean; onClose: () => void; wallet?: string }) => {
   const [status, setStatus] = useState<any>(null);
+  const [fetchedAt, setFetchedAt] = useState<number>(Date.now());
   const [claiming, setClaiming] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string>("");
+  const [countdown, setCountdown] = useState<string>("");
 
   useEffect(() => {
-    if (!open || !wallet) return;
+    if (!open) return;
+    setSuccess(false);
+    setErrorMsg("");
+    if (!wallet) return;
     let cancelled = false;
     (async () => {
       try {
         const { faucetApi } = await import('./lib/litdex-core-logic');
         const s = await faucetApi.getStatus(wallet);
-        if (!cancelled) setStatus(s);
+        if (!cancelled) { setStatus(s); setFetchedAt(Date.now()); }
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
   }, [open, wallet]);
 
+  const nextClaimIn: number = status?.nextClaimIn ?? 0;
+
   useEffect(() => {
-    if (!open) return;
-    const i = setInterval(() => setNow(Date.now()), 1000);
+    if (!open || !status || status.canClaim) return;
+    const tick = () => {
+      const secs = nextClaimIn - Math.floor((Date.now() - fetchedAt) / 1000);
+      if (secs <= 0) { setCountdown("Ready!"); return; }
+      const d = Math.floor(secs / 86400);
+      const h = Math.floor((secs % 86400) / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      const s = secs % 60;
+      if (d > 0) setCountdown(`${d}d ${h}h ${m}m`);
+      else setCountdown(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`);
+    };
+    tick();
+    const i = setInterval(tick, 1000);
     return () => clearInterval(i);
-  }, [open]);
-
-  const remaining = status?.nextClaimIn ? Math.max(0, status.nextClaimIn - Math.floor((now - (status._fetchedAt || now)) / 1000)) : 0;
-  useEffect(() => { if (status && !status._fetchedAt) setStatus({ ...status, _fetchedAt: Date.now() }); }, [status]);
-
-  const fmt = (sec: number) => {
-    const d = Math.floor(sec / 86400);
-    const h = Math.floor((sec % 86400) / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${pad(d)}:${pad(h)}:${pad(m)}:${pad(s)}`;
-  };
+  }, [open, status, nextClaimIn, fetchedAt]);
 
   const handleClaim = async () => {
     if (!wallet) return;
     setClaiming(true);
+    setErrorMsg("");
     try {
       const { faucetApi } = await import('./lib/litdex-core-logic');
       const res = await faucetApi.claim(wallet);
       if (res.ok) {
-        alert("✅ 0.001 zkLTC sent to your wallet!");
-        try {
-          addNotif(wallet, { type: "faucet", title: "Faucet Claimed", message: "0.001 zkLTC sent to your wallet" });
-        } catch { /* ignore */ }
-        onClose();
+        setSuccess(true);
+        try { addNotif(wallet, { type: "faucet", title: "Faucet Claimed", message: "0.001 zkLTC sent to your wallet" }); } catch {}
       } else {
         const reasonMap: Record<string, string> = {
-          no_external: "You need $1+ USDC or BNB on BSC chain to use faucet",
+          no_external: "Need $1+ USDC or BNB on BSC chain",
           has_enough: "You already have enough zkLTC",
+          cooldown: "Cooldown active",
         };
-        alert(reasonMap[res.reason || ""] || res.message || res.reason || "Claim failed");
+        setErrorMsg(reasonMap[res.reason || ""] || res.message || res.reason || "Claim failed");
+        // refresh status to surface countdown
+        try {
+          const s = await faucetApi.getStatus(wallet);
+          setStatus(s); setFetchedAt(Date.now());
+        } catch {}
       }
-    } catch {
-      alert("An error occurred during claiming.");
+    } catch (e: any) {
+      setErrorMsg(e?.message || "An error occurred during claiming.");
     } finally {
       setClaiming(false);
     }
@@ -3468,7 +3479,17 @@ const FaucetModal = ({ open, onClose, wallet }: { open: boolean; onClose: () => 
             <X size={18} />
           </button>
         </div>
-        {!status ? (
+
+        {success ? (
+          <div className="py-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 text-emerald-400" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <p className="text-lg font-bold mb-1">Claimed!</p>
+            <p className="text-sm text-brand-text-muted mb-6">0.001 zkLTC sent to your wallet</p>
+            <button onClick={onClose} className="w-full py-3 bg-white text-black rounded-xl font-bold text-sm">Close</button>
+          </div>
+        ) : !status ? (
           <p className="text-brand-text-muted text-sm py-8 text-center">Loading status…</p>
         ) : canClaim ? (
           <>
@@ -3481,14 +3502,24 @@ const FaucetModal = ({ open, onClose, wallet }: { open: boolean; onClose: () => 
             >
               {claiming ? "Claiming..." : "Claim 0.001 zkLTC"}
             </button>
+            {errorMsg && (
+              <div className="mt-3 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-center">
+                {errorMsg}
+              </div>
+            )}
           </>
         ) : (
           <>
-            <p className="text-brand-text-muted text-sm mb-3">Next claim available in:</p>
-            <div className="text-center font-mono text-3xl font-bold tabular-nums my-6 tracking-tight">
-              {fmt(remaining)}
+            <p className="text-brand-text-muted text-xs uppercase tracking-widest text-center mb-2">Next claim in</p>
+            <div className="text-center font-mono text-3xl font-bold tabular-nums my-4 tracking-tight">
+              {countdown || "—"}
             </div>
-            <p className="text-xs text-brand-text-muted/70 text-center mb-4">Faucet refills every 7 days</p>
+            <p className="text-xs text-brand-text-muted/70 text-center mb-4">Refills every 7 days</p>
+            {errorMsg && (
+              <div className="mb-3 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-center">
+                {errorMsg}
+              </div>
+            )}
             <button onClick={onClose} className="w-full py-3 bg-white/5 border border-white/10 text-white rounded-xl font-bold text-sm hover:bg-white/10 transition-all">
               Close
             </button>
