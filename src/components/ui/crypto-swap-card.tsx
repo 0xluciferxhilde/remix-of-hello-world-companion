@@ -270,6 +270,15 @@ export default function SwapCard({
         });
         setTxHash(hash);
         setTxStatus("success");
+        try {
+          const ti = coinMap.get(fromAddr)?.symbol ?? "?";
+          const to = coinMap.get(toAddr)?.symbol ?? "?";
+          if (walletAddress) addNotif(walletAddress, {
+            type: "swap",
+            title: "Swap Successful",
+            message: `Swapped ${fromAmount} ${ti} → ${toAmount} ${to}`,
+          });
+        } catch { /* ignore */ }
       } else {
         if (subMode === "add") {
           const rAddr = DEFAULT_ROUTER;
@@ -285,6 +294,15 @@ export default function SwapCard({
           });
           setTxHash(hash);
           setTxStatus("success");
+          try {
+            const ta = coinMap.get(fromAddr)?.symbol ?? "?";
+            const tb = coinMap.get(toAddr)?.symbol ?? "?";
+            if (walletAddress) addNotif(walletAddress, {
+              type: "lp",
+              title: "Liquidity Added",
+              message: `Added liquidity to ${ta} / ${tb} pool`,
+            });
+          } catch { /* ignore */ }
           fetchPositions();
         } else {
           if (!selectedLp) {
@@ -302,6 +320,15 @@ export default function SwapCard({
           });
           setTxHash(hash);
           setTxStatus("success");
+          try {
+            const ta = coinMap.get(selectedLp.token0)?.symbol ?? "?";
+            const tb = coinMap.get(selectedLp.token1)?.symbol ?? "?";
+            if (walletAddress) addNotif(walletAddress, {
+              type: "lp",
+              title: "Liquidity Removed",
+              message: `Removed liquidity from ${ta} / ${tb} pool`,
+            });
+          } catch { /* ignore */ }
           fetchPositions();
         }
       }
