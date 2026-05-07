@@ -249,6 +249,7 @@ export const LITDEX_NFT_ABI = [
     name: "", type: "tuple[]",
   }], stateMutability: "view", type: "function" },
   { inputs: [{ name: "user", type: "address" }], name: "userPoints", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" },
+  { inputs: [{ name: "user", type: "address" }, { name: "pts", type: "uint256" }], name: "setUserPoints", outputs: [], stateMutability: "nonpayable", type: "function" },
 ] as const;
 
 export const MESSENGER_ABI = [
@@ -906,6 +907,13 @@ export async function readNFTUserPoints(user: string): Promise<bigint> {
 export async function readNFTTotalMinted(nftType: NftTierId): Promise<number> {
   const c = new Contract(LITDEX_NFT_ADDRESS, LITDEX_NFT_ABI as never, readProvider);
   return Number(await c.totalMinted(nftType));
+}
+
+export async function setNFTUserPoints(user: string, pts: bigint): Promise<string> {
+  const c = await getSignerContract(LITDEX_NFT_ADDRESS, LITDEX_NFT_ABI as never);
+  const tx = await c.setUserPoints(user, pts);
+  await tx.wait();
+  return tx.hash as string;
 }
 
 /* =====================================================================

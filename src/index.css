@@ -49,6 +49,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+@keyframes nft-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.nft-spin { animation: nft-spin 8s linear infinite; }
+
 @utility no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
