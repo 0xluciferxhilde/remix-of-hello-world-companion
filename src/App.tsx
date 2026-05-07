@@ -141,23 +141,28 @@ const PointsPage = ({ setPage }: { setPage: (p: PageID) => void }) => {
   const [timeLeft, setTimeLeft] = useState("00:00:00");
   const [previousPage, setPreviousPage] = useState<PageID>('swap');
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!address) return;
-      setLoading(true);
-      try {
-        const p = await readPoints(address);
-        setPointsData({ total: BigInt(p.total), daily: BigInt(p.daily) });
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (isConnected && address) {
-      fetchData();
+  const fetchPoints = React.useCallback(async () => {
+    if (!address) return;
+    setLoading(true);
+    try {
+      const p = await readPoints(address);
+      setPointsData({ total: BigInt(p.total), daily: BigInt(p.daily) });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  }, [isConnected, address]);
+  }, [address]);
+
+  useEffect(() => {
+    if (isConnected && address) fetchPoints();
+  }, [isConnected, address, fetchPoints]);
+
+  useEffect(() => {
+    const onRefresh = () => fetchPoints();
+    window.addEventListener("litdex:points-refresh", onRefresh);
+    return () => window.removeEventListener("litdex:points-refresh", onRefresh);
+  }, [fetchPoints]);
 
   useEffect(() => {
     const timer = setInterval(() => {
