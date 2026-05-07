@@ -1093,6 +1093,23 @@ const ERC20Form = ({ onDeployed }: any) => {
       setTxHash(result.txHash);
       setTxStatus("success");
 
+      try {
+        if (address && (result as any).contractAddress) {
+          const ca = (result as any).contractAddress as string;
+          addNotif(address, {
+            type: "deploy",
+            title: "Token Deployed",
+            message: `${symbol} deployed at ${ca.slice(0,6)}...${ca.slice(-4)}`,
+          });
+        } else if (address) {
+          addNotif(address, {
+            type: "deploy",
+            title: "Token Deployed",
+            message: `${symbol} deployed successfully`,
+          });
+        }
+      } catch { /* ignore */ }
+
       // Points API Integration
       try {
         await fetch("https://api.test-hub.xyz/quest/complete", {
