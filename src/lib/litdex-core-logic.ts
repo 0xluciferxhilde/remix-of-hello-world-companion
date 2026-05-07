@@ -22,7 +22,7 @@
  * ----------------------------------------------------------------------------
  */
 
-import { BrowserProvider, Contract, JsonRpcProvider, parseEther, formatEther } from "ethers";
+import { BrowserProvider, Contract, JsonRpcProvider, parseEther, parseUnits, formatEther } from "ethers";
 import { defineChain, parseAbi } from "viem";
 import { http } from "wagmi";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
@@ -151,7 +151,7 @@ export const WZKLTC_ABI = [
 
 // ── LitDeX Deployer (points-earning, no fee) ────────────────────────────
 export const LITDEX_DEPLOYER_ABI = [
-  "function deployToken(string _name, string _symbol, uint256 _supply) payable returns (address)",
+  "function deployToken(string _name, string _symbol, uint256 _supply) returns (address)",
   "function totalDeployed() view returns (uint256)",
   "event TokenDeployed(address indexed deployer, address indexed token, string symbol)",
 ] as const;
@@ -541,7 +541,10 @@ export async function addLiquidity(opts: {
   return (receipt?.hash ?? tx.hash) as string;
 }
 
-/** Remove liquidity. `lpWei` is the LP-token amount to burn. */
+/** Remove liquidity. `lpWei` is the LP-token amount to burn.
+ *  Always resolves the LP token address via Factory.getPair(),
+ *  then approves the router for that exact LP token before removing.
+ */
 export async function removeLiquidity(opts: {
   tokenAAddr: string;
   tokenBAddr: string;
@@ -551,15 +554,33 @@ export async function removeLiquidity(opts: {
 }): Promise<string> {
   const router = await getSignerContract(DEFAULT_ROUTER, ROUTER_ABI);
   const deadline = Math.floor(Date.now() / 1000) + (opts.deadlineSec ?? SWAP_DEADLINE_SEC);
+
   const aIsNative = isNativeAddr(opts.tokenAAddr) || opts.tokenAAddr.toLowerCase() === WZKLTC_ADDR.toLowerCase();
   const bIsNative = isNativeAddr(opts.tokenBAddr) || opts.tokenBAddr.toLowerCase() === WZKLTC_ADDR.toLowerCase();
+
+  // Resolve actual ERC20 addresses (wrap native sentinel to WZKLTC for Factory lookup)
+  const tokenAResolved = isNativeAddr(opts.tokenAAddr) ? WZKLTC_ADDR : opts.tokenAAddr;
+  const tokenBResolved = isNativeAddr(opts.tokenBAddr) ? WZKLTC_ADDR : opts.tokenBAddr;
+
+  // Always look up LP token via Factory.getPair()
+  const factory = new Contract(DEFAULT_FACTORY, FACTORY_ABI, readProvider);
+  const pairAddr = String(await factory.getPair(tokenAResolved, tokenBResolved));
+  if (!pairAddr || pairAddr === "0x0000000000000000000000000000000000000000") {
+    throw new Error("Pair not found for selected tokens");
+  }
+
+  // Approve router to spend the LP token
+  const lpToken = await getSignerContract(pairAddr, ERC20_ABI);
+  const approveTx = await lpToken.approve(DEFAULT_ROUTER, opts.lpWei);
+  await approveTx.wait();
+
   let tx;
   if (aIsNative && !bIsNative) {
-    tx = await router.removeLiquidityZKLTC(opts.tokenBAddr, opts.lpWei, 0, 0, opts.recipient, deadline);
+    tx = await router.removeLiquidityZKLTC(tokenBResolved, opts.lpWei, 0, 0, opts.recipient, deadline);
   } else if (bIsNative && !aIsNative) {
-    tx = await router.removeLiquidityZKLTC(opts.tokenAAddr, opts.lpWei, 0, 0, opts.recipient, deadline);
+    tx = await router.removeLiquidityZKLTC(tokenAResolved, opts.lpWei, 0, 0, opts.recipient, deadline);
   } else {
-    tx = await router.removeLiquidity(opts.tokenAAddr, opts.tokenBAddr, opts.lpWei, 0, 0, opts.recipient, deadline);
+    tx = await router.removeLiquidity(tokenAResolved, tokenBResolved, opts.lpWei, 0, 0, opts.recipient, deadline);
   }
   const receipt = await tx.wait();
   return (receipt?.hash ?? tx.hash) as string;
@@ -643,11 +664,13 @@ export async function deployTokenLitDeX(opts: {
   totalSupply: string | bigint;
 }): Promise<DeployedTokenResult> {
   const deployer = await getSignerContract(LITDEX_DEPLOYER_ADDRESS, LITDEX_DEPLOYER_ABI);
+  const supplyBigInt = typeof opts.totalSupply === "bigint"
+    ? opts.totalSupply
+    : parseUnits(String(opts.totalSupply), 18);
   const tx = await deployer.deployToken(
     opts.name.trim(),
     opts.symbol.trim(),
-    BigInt(opts.totalSupply),
-    { value: parseEther("0.05") }
+    supplyBigInt
   );
   const receipt = await tx.wait();
   let tokenAddress: string | undefined;
