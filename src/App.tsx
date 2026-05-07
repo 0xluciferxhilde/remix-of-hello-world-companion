@@ -3707,6 +3707,25 @@ export default function App() {
   const [faucetModalOpen, setFaucetModalOpen] = useState(false);
   const { openConnectModal } = useConnectModal();
 
+  // Theme (dark/light) toggle — persisted in localStorage
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('litdex_theme');
+      const initial = saved === 'light' || saved === 'dark' ? saved : 'dark';
+      setTheme(initial as 'dark' | 'light');
+      document.documentElement.setAttribute('data-theme', initial);
+    } catch {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  }, []);
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('litdex_theme', next); } catch { /* ignore */ }
+  };
+
   // Check-in red dot — load from contract
   useEffect(() => {
     if (!walletAddr) { setHasCheckedInToday(true); return; }
