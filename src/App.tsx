@@ -3296,6 +3296,13 @@ const FaucetPage = () => {
       const res = await faucetApi.claim(address);
       if (res.ok) {
         alert(res.message || "Claim successful!");
+        try {
+          if (address) addNotif(address, {
+            type: "faucet",
+            title: "Faucet Claimed",
+            message: `0.001 zkLTC sent to your wallet`,
+          });
+        } catch { /* ignore */ }
         fetchStatus();
       } else {
         alert(res.reason || res.message || "Claim failed. Check requirements.");
