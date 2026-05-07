@@ -3329,9 +3329,13 @@ const WalletBalanceDisplay = () => {
 };
 
 export default function App() {
+  const { address: walletAddr } = useAccount();
   const [activePage, setActivePage] = useState<PageID>('swap');
   const [previousPage, setPreviousPage] = useState<PageID>('swap');
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const { notifs: notifList } = useNotifications(walletAddr);
+  const unreadCount = notifList.filter(n => !n.read).length;
 
   // Helper to handle page changes while tracking history for the check-in overlay
   const handlePageChange = (p: PageID) => {
@@ -3421,9 +3425,18 @@ export default function App() {
               >
                 <CalendarCheck size={24} className={cn("transition-colors", activePage === 'checkin' ? "text-white" : "group-hover:text-white")} />
               </button>
-              <button className="relative w-16 h-16 flex items-center justify-center rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-white/60 backdrop-blur-3xl shadow-2xl group">
+              <button
+                onClick={() => setNotifOpen(o => !o)}
+                className="relative w-16 h-16 flex items-center justify-center rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-white/60 backdrop-blur-3xl shadow-2xl group"
+              >
                 <Bell size={24} className="group-hover:text-white transition-colors" />
-                <div className="absolute top-5 right-5 w-2.5 h-2.5 bg-white rounded-full ring-4 ring-brand-bg shadow-[0_0_15px_rgba(255,255,255,0.8)]" />
+                {unreadCount > 0 && (
+                  unreadCount > 9 ? (
+                    <div className="absolute top-3 right-3 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-brand-bg">9+</div>
+                  ) : (
+                    <div className="absolute top-4 right-4 w-2.5 h-2.5 bg-red-500 rounded-full ring-4 ring-brand-bg shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
+                  )
+                )}
               </button>
             </div>
         </div>
