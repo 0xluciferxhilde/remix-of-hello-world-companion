@@ -735,43 +735,6 @@ const CheckinPage = () => {
       </Card>
       </div>
 
-      {/* Floating Success Notification */}
-      <AnimatePresence>
-        {successMsg && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="fixed bottom-10 right-10 z-50 bg-white text-black p-8 rounded-3xl shadow-[0_30px_100px_rgba(255,255,255,0.2)] max-w-sm border-4 border-black/5"
-          >
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-black/5 flex items-center justify-center">
-                <Trophy size={24} />
-              </div>
-              <div>
-                <div className="font-black uppercase tracking-tighter text-lg">Mission Success</div>
-                <div className="text-[9px] font-bold uppercase tracking-widest opacity-40">Protocol Verification Complete</div>
-              </div>
-            </div>
-            <div className="space-y-3 pt-4 border-t border-black/5">
-              <div className="flex justify-between items-center text-xs font-bold">
-                <span className="opacity-40 uppercase tracking-widest">Base Points</span>
-                <span>+{successMsg.pts} PTS</span>
-              </div>
-              <div className="flex justify-between items-center text-xs font-bold">
-                <span className="opacity-40 uppercase tracking-widest">Incentive Yield</span>
-                <span>+{Number(successMsg.ldex).toLocaleString()} LDEX</span>
-              </div>
-              {successMsg.zkLTC && (
-                <div className="flex justify-between items-center text-xs font-bold text-emerald-600">
-                  <span className="opacity-40 uppercase tracking-widest">Sunday Bonus</span>
-                  <span>+{successMsg.zkLTC} zkLTC 🎁</span>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
