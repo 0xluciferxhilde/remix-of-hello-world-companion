@@ -496,6 +496,21 @@ const CheckinPage = () => {
         zkLTC: zkLTCBonus || undefined,
         hash
       });
+
+      try {
+        if (address) {
+          addNotif(address, {
+            type: "checkin",
+            title: "Daily Check-in",
+            message: `Day ${Number(newInfo.streak)} streak! Earned ${ldexVal} LDEX`,
+          });
+          addNotif(address, {
+            type: "points",
+            title: "Points Earned",
+            message: `+10 points earned from daily check-in`,
+          });
+        }
+      } catch { /* ignore */ }
       
       setInfo({
         streak: Number(newInfo.streak),
@@ -2817,6 +2832,13 @@ const GamesPage = () => {
       const { claimGF } = await import('./lib/litdex-core-logic');
       await claimGF();
       alert("Gaming Fuel claimed!");
+      try {
+        if (address) addNotif(address, {
+          type: "gf",
+          title: "Game Fuel Claimed",
+          message: `Game Fuel added to your balance`,
+        });
+      } catch { /* ignore */ }
       fetchGF();
     } catch (err) {
       alert(errMsg(err));
