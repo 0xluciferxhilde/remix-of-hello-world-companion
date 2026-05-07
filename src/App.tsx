@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import NotificationsPanel, { useNotifications } from './components/NotificationsPanel';
+import { addNotif } from './lib/notifications';
 import { 
   ArrowLeftRight, 
   Droplets, 
