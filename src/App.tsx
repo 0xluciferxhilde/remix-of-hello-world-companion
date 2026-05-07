@@ -3003,6 +3003,25 @@ const GamesPage = () => {
   };
 
   return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-20 max-w-3xl mx-auto px-4">
+      <Card className="p-12 bg-black/40 border-white/5 backdrop-blur-3xl shadow-2xl text-center relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.05),transparent_60%)] pointer-events-none" />
+        <div className="relative z-10 flex flex-col items-center gap-6">
+          <div className="w-24 h-24 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center text-white shadow-[0_0_40px_rgba(255,255,255,0.08)]">
+            <Lock size={44} strokeWidth={1.5} />
+          </div>
+          <h1 className="text-4xl font-black tracking-tighter text-white">Games Locked</h1>
+          <p className="text-brand-text-muted max-w-md text-sm leading-relaxed">
+            The gaming arena is being forged. Stay tuned — Gaming Fuel and rewards will go live soon.
+          </p>
+          <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/30 mt-2">Coming Soon</div>
+        </div>
+      </Card>
+    </motion.div>
+  );
+
+  // eslint-disable-next-line no-unreachable
+  return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-12 max-w-6xl mx-auto px-4">
       <Card className="p-10 mb-12 flex flex-col md:flex-row items-center justify-between gap-12 bg-black/40 text-center md:text-left border-white/5 backdrop-blur-xl group overflow-hidden relative">
         <div className="absolute top-0 right-0 w-96 h-96 bg-white/[0.01] rounded-full blur-3xl -mr-48 -mt-48 transition-all group-hover:bg-white/[0.03]" />
