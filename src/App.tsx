@@ -42,7 +42,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAccount, useChainId, useSwitchChain, useBalance } from 'wagmi';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
 import { formatEther, parseEther, formatUnits, parseUnits } from 'ethers';
 import SwapCard from './components/ui/crypto-swap-card';
 import { AnimatedNavFramer } from './components/ui/navigation-menu';
@@ -3392,6 +3392,113 @@ const WalletBalanceDisplay = () => {
   );
 };
 
+// --- Faucet Modal ---
+const FaucetModal = ({ open, onClose, wallet }: { open: boolean; onClose: () => void; wallet?: string }) => {
+  const [status, setStatus] = useState<any>(null);
+  const [claiming, setClaiming] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!open || !wallet) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { faucetApi } = await import('./lib/litdex-core-logic');
+        const s = await faucetApi.getStatus(wallet);
+        if (!cancelled) setStatus(s);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [open, wallet]);
+
+  useEffect(() => {
+    if (!open) return;
+    const i = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(i);
+  }, [open]);
+
+  const remaining = status?.nextClaimIn ? Math.max(0, status.nextClaimIn - Math.floor((now - (status._fetchedAt || now)) / 1000)) : 0;
+  useEffect(() => { if (status && !status._fetchedAt) setStatus({ ...status, _fetchedAt: Date.now() }); }, [status]);
+
+  const fmt = (sec: number) => {
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d)}:${pad(h)}:${pad(m)}:${pad(s)}`;
+  };
+
+  const handleClaim = async () => {
+    if (!wallet) return;
+    setClaiming(true);
+    try {
+      const { faucetApi } = await import('./lib/litdex-core-logic');
+      const res = await faucetApi.claim(wallet);
+      if (res.ok) {
+        alert("✅ 0.001 zkLTC sent to your wallet!");
+        try {
+          addNotif(wallet, { type: "faucet", title: "Faucet Claimed", message: "0.001 zkLTC sent to your wallet" });
+        } catch { /* ignore */ }
+        onClose();
+      } else {
+        const reasonMap: Record<string, string> = {
+          no_external: "You need $1+ USDC or BNB on BSC chain to use faucet",
+          has_enough: "You already have enough zkLTC",
+        };
+        alert(reasonMap[res.reason || ""] || res.message || res.reason || "Claim failed");
+      }
+    } catch {
+      alert("An error occurred during claiming.");
+    } finally {
+      setClaiming(false);
+    }
+  };
+
+  if (!open) return null;
+  const canClaim = status?.canClaim;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md bg-brand-surface border border-brand-border rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold tracking-tight">zkLTC Faucet</h2>
+          <button onClick={onClose} className="text-brand-text-muted hover:text-white">
+            <X size={18} />
+          </button>
+        </div>
+        {!status ? (
+          <p className="text-brand-text-muted text-sm py-8 text-center">Loading status…</p>
+        ) : canClaim ? (
+          <>
+            <p className="text-brand-text-muted text-sm mb-2">Claim 0.001 zkLTC to get started on LitVM testnet</p>
+            <p className="text-xs text-brand-text-muted/70 mb-6">Requires $1+ USDC or BNB on BSC chain</p>
+            <button
+              onClick={handleClaim}
+              disabled={claiming}
+              className="w-full py-3.5 bg-white text-black rounded-xl font-bold text-base hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              {claiming ? "Claiming..." : "Claim 0.001 zkLTC"}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-brand-text-muted text-sm mb-3">Next claim available in:</p>
+            <div className="text-center font-mono text-3xl font-bold tabular-nums my-6 tracking-tight">
+              {fmt(remaining)}
+            </div>
+            <p className="text-xs text-brand-text-muted/70 text-center mb-4">Faucet refills every 7 days</p>
+            <button onClick={onClose} className="w-full py-3 bg-white/5 border border-white/10 text-white rounded-xl font-bold text-sm hover:bg-white/10 transition-all">
+              Close
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const { address: walletAddr } = useAccount();
   const [activePage, setActivePage] = useState<PageID>('swap');
@@ -3400,6 +3507,47 @@ export default function App() {
   const [notifOpen, setNotifOpen] = useState(false);
   const { notifs: notifList } = useNotifications(walletAddr);
   const unreadCount = notifList.filter(n => !n.read).length;
+  const [hasCheckedInToday, setHasCheckedInToday] = useState<boolean>(true);
+  const [hasNewNotif, setHasNewNotif] = useState<boolean>(false);
+  const [faucetModalOpen, setFaucetModalOpen] = useState(false);
+  const { openConnectModal } = useConnectModal();
+
+  // Check-in red dot — load from contract
+  useEffect(() => {
+    if (!walletAddr) { setHasCheckedInToday(true); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [info, currentDay] = await Promise.all([
+          readCheckinInfo(walletAddr),
+          readCurrentDay(),
+        ]);
+        if (!cancelled) setHasCheckedInToday(info.lastDay >= currentDay);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [walletAddr, activePage]);
+
+  // Notification red dot — localStorage + event listener
+  const notifFlagKey = walletAddr ? `litdex_has_new_notif_${walletAddr.toLowerCase()}` : "";
+  useEffect(() => {
+    if (!walletAddr) { setHasNewNotif(false); return; }
+    try { setHasNewNotif(localStorage.getItem(notifFlagKey) === "true"); } catch { /* ignore */ }
+    const onNotif = () => {
+      try { localStorage.setItem(notifFlagKey, "true"); } catch { /* ignore */ }
+      setHasNewNotif(true);
+    };
+    window.addEventListener("litdex:notif", onNotif);
+    return () => window.removeEventListener("litdex:notif", onNotif);
+  }, [walletAddr, notifFlagKey]);
+
+  // Open notif panel → mark as seen
+  useEffect(() => {
+    if (notifOpen && walletAddr) {
+      try { localStorage.setItem(notifFlagKey, "false"); } catch { /* ignore */ }
+      setHasNewNotif(false);
+    }
+  }, [notifOpen, walletAddr, notifFlagKey]);
 
   // Helper to handle page changes while tracking history for the check-in overlay
   const handlePageChange = (p: PageID) => {
@@ -3409,12 +3557,21 @@ export default function App() {
     setActivePage(p);
   };
 
+  const handleFaucetClick = () => {
+    if (!walletAddr) {
+      openConnectModal?.();
+      return;
+    }
+    setFaucetModalOpen(true);
+  };
+
   // Close dropdown on click outside logic simplified for React
   useEffect(() => {
     const handleScroll = () => setActiveDropdown(null);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
 
   const renderPage = (page: PageID) => {
     switch (page) {
@@ -3460,7 +3617,6 @@ export default function App() {
         </div>
         <div className="flex flex-col -gap-1">
           <span className="text-2xl sm:text-3xl font-black tracking-tighter text-white leading-none italic group-hover:tracking-normal transition-all duration-700">LitDeX</span>
-          <span className="hidden sm:block text-[9px] font-bold tracking-[0.6em] text-white/50 uppercase leading-none mt-1.5 transition-all group-hover:text-white">Mainnet</span>
         </div>
       </div>
 
@@ -3470,7 +3626,7 @@ export default function App() {
             {/* Bottom Left Tools */}
             <div className="hidden lg:flex items-center pointer-events-auto">
               <button 
-                onClick={() => setActivePage('faucet')}
+                onClick={handleFaucetClick}
                 className="group flex items-center gap-3 px-8 py-4 rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-xs font-bold uppercase tracking-[0.2em] text-white/80 backdrop-blur-3xl shadow-2xl"
               >
                 <Droplets size={16} className="group-hover:text-white transition-colors" />
@@ -3488,19 +3644,20 @@ export default function App() {
                 )}
               >
                 <CalendarCheck size={24} className={cn("transition-colors", activePage === 'checkin' ? "text-white" : "group-hover:text-white")} />
+                <span className={cn(
+                  "absolute top-1 right-1 w-2 h-2 rounded-full",
+                  hasCheckedInToday ? "bg-white" : "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]"
+                )} />
               </button>
               <button
                 onClick={() => setNotifOpen(o => !o)}
                 className="relative w-16 h-16 flex items-center justify-center rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 hover:bg-black/60 transition-all text-white/60 backdrop-blur-3xl shadow-2xl group"
               >
                 <Bell size={24} className="group-hover:text-white transition-colors" />
-                {unreadCount > 0 && (
-                  unreadCount > 9 ? (
-                    <div className="absolute top-3 right-3 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-brand-bg">9+</div>
-                  ) : (
-                    <div className="absolute top-4 right-4 w-2.5 h-2.5 bg-red-500 rounded-full ring-4 ring-brand-bg shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
-                  )
-                )}
+                <span className={cn(
+                  "absolute top-1 right-1 w-2 h-2 rounded-full",
+                  hasNewNotif ? "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" : "bg-white"
+                )} />
               </button>
             </div>
         </div>
@@ -3591,18 +3748,18 @@ export default function App() {
             <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-white text-sm font-bold">
               <LogoLD size={14} />
             </div>
-            <span className="text-brand-text-muted text-xs font-mono">LitDeX Mainnet v1.0.4-stable</span>
+            <span className="text-brand-text-muted text-xs font-mono">LitDeX Testnet</span>
           </div>
-          <div className="flex gap-8 text-[10px] uppercase font-bold tracking-[0.2em] text-brand-text-muted">
-            <a href="#" className="hover:text-brand-teal transition-colors">Twitter (X)</a>
-            <a href="#" className="hover:text-brand-teal transition-colors">Discord</a>
-            <a href="#" className="hover:text-brand-teal transition-colors">Github</a>
-            <a href="#" className="hover:text-brand-teal transition-colors">Terms</a>
+          <div className="flex gap-8 text-xs uppercase font-mono tracking-widest text-brand-text-muted">
+            <a href="https://x.com/LitDeXApp" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Twitter (X)</a>
+            <a href="https://t.me/litdex_discussion" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Telegram</a>
+            <a href="https://litdex.gitbook.io/litdex/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Docs</a>
           </div>
         </div>
       </footer>
 
       <NotificationsPanel open={notifOpen} onClose={() => setNotifOpen(false)} wallet={walletAddr} />
+      <FaucetModal open={faucetModalOpen} onClose={() => setFaucetModalOpen(false)} wallet={walletAddr} />
     </div>
   );
 }
