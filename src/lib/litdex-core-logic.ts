@@ -643,11 +643,13 @@ export async function deployTokenLitDeX(opts: {
   totalSupply: string | bigint;
 }): Promise<DeployedTokenResult> {
   const deployer = await getSignerContract(LITDEX_DEPLOYER_ADDRESS, LITDEX_DEPLOYER_ABI);
+  const supplyBigInt = typeof opts.totalSupply === "bigint"
+    ? opts.totalSupply
+    : parseUnits(String(opts.totalSupply), 18);
   const tx = await deployer.deployToken(
     opts.name.trim(),
     opts.symbol.trim(),
-    BigInt(opts.totalSupply),
-    { value: parseEther("0.05") }
+    supplyBigInt
   );
   const receipt = await tx.wait();
   let tokenAddress: string | undefined;
