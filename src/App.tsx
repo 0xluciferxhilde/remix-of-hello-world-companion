@@ -847,16 +847,31 @@ const NFTsPage = () => {
   const handleMint = async (nftType: 1 | 2 | 3) => {
     if (!address) return;
     const tier = NFT_TIER_META.find(t => t.nftType === nftType)!;
-    if (totalPoints < BigInt(tier.cost)) { addNotif(address, { type: "nft", title: "Not enough points", message: `Need ${tier.cost} pts` }); return; }
+    if (totalPoints < BigInt(tier.cost)) {
+      addNotif(address, { type: "nft", title: "Not enough points", message: `Need ${tier.cost} pts` });
+      showError(`Not enough points — need ${tier.cost} pts`);
+      return;
+    }
     setMintingType(nftType);
     try {
       const lib = await import('./lib/litdex-core-logic');
       try { await lib.setNFTUserPoints(address, totalPoints); } catch (e) { console.warn("setUserPoints failed", e); }
       await lib.mintRewardNFT(nftType);
       addNotif(address, { type: "nft", title: "+NFT minted!", message: `${tier.name} minted successfully` });
+      showSuccess({
+        title: "NFT MINTED",
+        subtitle: "PROTOCOL VERIFICATION COMPLETE",
+        rows: [
+          { label: "NFT TYPE", value: tier.name },
+          { label: "POINTS USED", value: `-${tier.cost.toLocaleString()} PTS` },
+          { label: "DAILY REWARD", value: tier.rewards },
+        ],
+      });
+      refreshPoints();
       await fetchAll();
     } catch (err: any) {
       addNotif(address, { type: "nft", title: "Mint failed", message: err?.message?.slice(0, 80) || "Transaction reverted" });
+      showError(errMsg(err));
     } finally {
       setMintingType(null);
     }
