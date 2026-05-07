@@ -22,9 +22,39 @@
   }
 }
 
+/* Theme overrides — applied via data-theme on <html> */
+:root[data-theme="dark"] {
+  --color-brand-bg: #0D1117;
+  --color-brand-surface: #161B22;
+  --color-brand-surface-2: #1f262e;
+  --color-brand-border: #30363D;
+  --color-brand-text-primary: #F8FAFC;
+  --color-brand-text-muted: #8B949E;
+  --color-brand-teal: #4FD1C5;
+  --color-brand-teal-glow: rgba(79, 209, 197, 0.18);
+  --color-brand-warning: #F97316;
+}
+
+:root[data-theme="light"] {
+  --color-brand-bg: #FFFFFF;
+  --color-brand-surface: #F4F6F9;
+  --color-brand-surface-2: #F8FAFC;
+  --color-brand-border: #D1D5DB;
+  --color-brand-text-primary: #111827;
+  --color-brand-text-muted: #6B7280;
+  --color-brand-teal: #0D9488;
+  --color-brand-teal-glow: rgba(13, 148, 136, 0.18);
+  --color-brand-warning: #EA580C;
+}
+
+:root, :root[data-theme="dark"], :root[data-theme="light"] {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
 @layer base {
   body {
     @apply bg-brand-bg text-brand-text-primary font-sans antialiased selection:bg-brand-teal/30;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 }
 
