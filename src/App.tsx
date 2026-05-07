@@ -899,12 +899,12 @@ const NFTsPage = () => {
           const notEnough = totalPoints < BigInt(tier.cost);
           const minting = mintingType === tier.nftType;
           return (
-            <div key={tier.nftType} className="rounded-2xl border border-white/10 bg-brand-surface overflow-hidden hover:border-white/20 transition-all">
-              <div className="relative w-full bg-black flex items-center justify-center" style={{ height: 240 }}>
+          <div key={tier.nftType} className="rounded-2xl border border-white/10 bg-brand-surface overflow-hidden hover:border-white/20 transition-all">
+              <div className="relative w-full bg-[#080808] flex items-center justify-center">
                 <div className="absolute top-4 right-4 px-2 py-1 rounded-md bg-brand-bg/80 backdrop-blur-md border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white z-10">
                   {tier.rarity}
                 </div>
-                <img src={tier.image} alt={tier.name} className="w-full h-full object-contain" />
+                <StackIcon tier={tier.tier} />
               </div>
               <div className="p-5 space-y-4">
                 <div>
